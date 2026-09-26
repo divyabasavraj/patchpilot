@@ -125,11 +125,38 @@ Format: **what I decided → options considered → why → trade-off.** These m
 ### D7. Python 3.12 via `uv` (2026-09-25)
 - **Why:** my system Python is 3.14, which is too new for some AI libraries. `uv` installs 3.12 just for this project without touching the rest of my setup.
 
+### D8. Router uses rules first, the AI only as a fallback (2026-09-26)
+- **Options:** always ask the AI which route to take; rules only; rules first, then the AI.
+- **Why:** questions containing an ID like `CVE-2021-44228`, or a known package name, can be routed with a simple pattern check. It's instant, free, and never wrong. The AI is only asked for vague questions.
+- **Trade-off:** the rules need maintaining, but they're small and unit-tested.
+
+### D9. Unpinned requirements are reported, not guessed (2026-09-26)
+- **Why:** `django>=3.0` could mean many versions. Guessing one would break the "facts from code" rule, so the scanner says "not checked: not pinned".
+
+### D10. A small frozen data snapshot is committed for PR CI (2026-09-26)
+- **Why:** PR exams need identical data every run (D6). I commit a small set of raw advisory files (<10 MB) covering the exam packages plus ~500 distractors, instead of the full database.
+
 ---
 
 ## 5. Daily journal
 
 *Newest entry first. One entry per work day.*
+
+### Day 2 — 2026-09-26: Written design spec
+**What I did**
+- Turned yesterday's design into a written spec: `docs/superpowers/specs/2026-09-26-cve-copilot-design.md`.
+- Pinned down the details: database tables, how version matching works, the three guards, exam sets, pass marks, CI jobs, and 8 build phases.
+- Made decisions D8–D10.
+
+**What I learned**
+- OSV gives severity as a CVSS *vector* (a coded string), not a number. A small library (`cvss`) turns it into a 0–10 score.
+- New data should be built next to the old database and swapped in only when complete. Then a failed download can never leave half-written data.
+
+**Open questions**
+- GitHub Models endpoint and model ID: confirm in Phase 6.
+
+**Next**
+- Review the spec, write the Phase 1 build plan, and start data ingest.
 
 ### Day 1 — 2026-09-25: Idea and design
 **What I did**
