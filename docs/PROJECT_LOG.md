@@ -136,11 +136,38 @@ Format: **what I decided → options considered → why → trade-off.** These m
 ### D10. A small frozen data snapshot is committed for PR CI (2026-09-26)
 - **Why:** PR exams need identical data every run (D6). I commit a small set of raw advisory files (<10 MB) covering the exam packages plus ~500 distractors, instead of the full database.
 
+### D11. Malware records kept in the database, left out of meaning search (2026-09-27)
+- **Why:** 11,785 of the 25,742 OSV PyPI records (46%) are `MAL-` records: fake packages uploaded to trick people. The scanner should still warn "this package is malware", so they stay in SQLite. Their text is near-identical boilerplate ("Malicious code in X"), so in Chroma they would crowd out real explanations.
+
+### D12. Only PyPI packages and ECOSYSTEM version ranges are stored (2026-09-27)
+- **Why:** some Python advisories also list npm/NuGet/Maven packages, and some ranges are Git commit hashes. Neither can be compared with a pip version. Explicit version lists are always kept.
+
+### D13. CVSS preference: v3, then v4, then v2 (2026-09-27)
+- **Why:** v3 is the most common (~9.6k records), so scores are comparable across advisories.
+
 ---
 
 ## 5. Daily journal
 
 *Newest entry first. One entry per work day.*
+
+### Day 3 — 2026-09-27: Spec approved, Phase 1 plan written
+**What I did**
+- Approved the design spec.
+- Looked at the real data before planning: OSV PyPI export = 25,742 advisories (34 MB zip; 6,338 GHSA, 7,611 PYSEC, 11,785 MAL, 8 OSV); 578 withdrawn; CISA KEV feed downloads fine.
+- Wrote the Phase 1 build plan (11 test-first tasks): `docs/superpowers/plans/2026-09-27-phase1-data-ingest.md`.
+- Made decisions D11–D13.
+
+**What I learned**
+- Almost half of the "vulnerabilities" for Python are actually malware packages (typosquats like `ascii2text` pretending to be `art`).
+- Checking library behaviour *before* writing the plan catches bugs early (see Challenges).
+- Embedding is the slow step: ~9 s per 200 long documents on my Mac, so the full build takes ~10 minutes.
+
+**Open questions**
+- Will the injection scanner wrongly flag real advisories *about* prompt injection (e.g. in LangChain)? Check the flagged list after the first real build.
+
+**Next**
+- Build Phase 1, task by task (native approach), starting with Task 1.
 
 ### Day 2 — 2026-09-26: Written design spec
 **What I did**
@@ -225,7 +252,7 @@ The CI machine doesn't run the model. It calls GitHub Models' free tier. Code ch
 
 | Date | Problem | Cause | Fix | Lesson |
 |---|---|---|---|---|
-| | | | | |
+| 2026-09-27 | Rebuilding the Chroma index into the same folder failed: "Collection [advisories] already exists" | Chroma caches one client per folder path; after the folder was renamed and recreated, it still used the old cached one | Call `client.clear_system_cache()` after each build (found while planning, reproduced in a scratch test) | Test how a library behaves on *re-runs*, not just the first run. Nightly jobs re-run forever |
 
 ---
 
