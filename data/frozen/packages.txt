@@ -1,0 +1,16 @@
+# Packages the exams use. Every advisory for these goes into the frozen snapshot.
+django
+flask
+werkzeug
+jinja2
+requests
+urllib3
+pyyaml
+pillow
+cryptography
+aiohttp
+sqlalchemy
+paramiko
+lxml
+setuptools
+gunicorn
