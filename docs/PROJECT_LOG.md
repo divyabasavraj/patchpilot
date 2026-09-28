@@ -151,6 +151,30 @@ Format: **what I decided → options considered → why → trade-off.** These m
 
 *Newest entry first. One entry per work day.*
 
+### Day 4 — 2026-09-28: Phase 1 built (data ingest)
+**What I did**
+- Built all of Phase 1, test-first: settings, OSV parser, KEV parser, injection scanner, SQLite store, Chroma index, build pipeline with atomic swap, CLI, frozen snapshot, and the LLM interface (`ollama` / `github` / `fake`). 56 unit tests, no network calls.
+- First real live build (numbers from `data/live/manifest.json`):
+
+  | Advisories stored | Withdrawn (skipped) | Malformed | Malware (`MAL-`) | Indexed in Chroma | Flagged by injection scanner | KEV entries | Build time |
+  |---|---|---|---|---|---|---|---|
+  | 25,164 | 578 | 0 | 11,760 | 13,404 | 15 | 1,728 | 20 min 2 s |
+
+- Frozen snapshot for CI: 1,303 raw advisory files, 6.2 MB (under the 10 MB limit), 1 KEV entry. Frozen build: 1,264 advisories (1,303 − 39 withdrawn), 0 malformed, 221 malware, 1,043 indexed; 1 min 17 s.
+- Checked by hand: `CVE-2023-30861` (Flask session cookie leak) → flask, fixed in 2.2.5 and 2.3.2. Correct.
+- Smoke-tested the local model through my own `complete()` function: asked for JSON, got `{"ok": true}`.
+
+**What I learned**
+- The injection scanner flagged 15 advisories: 10 "ignore instructions", 4 "system prompt", 1 chat-markup. **All 15 are real advisories about AI tools** (Open WebUI, PraisonAI, Langroid, mcp-atlassian) whose text *quotes* attack examples. So the answer to Day 3's open question is: yes, it does flag real advisories about prompt injection. That's an acceptable trade-off: they stay in the database and are only hidden from the LLM (Phase 5).
+- The full build took 20 minutes, twice my estimate, and made the laptop hot: embedding 13,404 documents keeps all CPU cores busy (403% CPU). That's fine for a nightly job, but it's a reason to keep CI on the small frozen snapshot.
+- Mock objects can behave differently from real ones (see Challenges).
+
+**Open questions**
+- Only 1 KEV entry matches the snapshot packages. Is that enough to test the "actively exploited" signal in exams, or should the snapshot deliberately include a KEV-listed Python package?
+
+**Next**
+- Phase 2: the scanner (read `requirements.txt`, compare versions against affected ranges).
+
 ### Day 3 — 2026-09-27: Spec approved, Phase 1 plan written
 **What I did**
 - Approved the design spec.
@@ -253,6 +277,8 @@ The CI machine doesn't run the model. It calls GitHub Models' free tier. Code ch
 | Date | Problem | Cause | Fix | Lesson |
 |---|---|---|---|---|
 | 2026-09-27 | Rebuilding the Chroma index into the same folder failed: "Collection [advisories] already exists" | Chroma caches one client per folder path; after the folder was renamed and recreated, it still used the old cached one | Call `client.clear_system_cache()` after each build (found while planning, reproduced in a scratch test) | Test how a library behaves on *re-runs*, not just the first run. Nightly jobs re-run forever |
+| 2026-09-28 | Retry test crashed: "Cannot call `raise_for_status` as the request instance has not been set" | httpx's `raise_for_status()` needs the original request attached, even on a 200 reply; the test's fake replies had none | Only call `raise_for_status()` when the reply is actually an error (`resp.is_error`) | Fakes in tests can be "thinner" than real objects; write code that only relies on what it needs |
+| 2026-09-28 | Injection scanner flagged 15 real advisories | Advisories *about* AI tools quote attack text like "ignore previous instructions" | Kept as a known trade-off: flagged docs are stored, only hidden from the LLM | A security filter always has false positives; measure them and decide consciously |
 
 ---
 
