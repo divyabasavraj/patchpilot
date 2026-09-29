@@ -30,8 +30,8 @@ def parse_osv(record: dict) -> Advisory | None:
     vector, score = _cvss(record.get("severity", []))
     return Advisory(
         id=record["id"],
-        summary=record.get("summary", ""),
-        details=record.get("details", ""),
+        summary=record.get("summary") or "",
+        details=record.get("details") or "",
         published=record.get("published"),
         modified=record.get("modified"),
         cvss_vector=vector,
@@ -64,12 +64,14 @@ def _ranges_from_events(package: str, events: list[dict]) -> list[AffectedRange]
 
 
 def _cvss(severity: list[dict]) -> tuple[str | None, float | None]:
+    """First vector that parses wins; if none parse, keep the first one without a score."""
     by_type = {s.get("type"): s.get("score") for s in severity}
+    first_bad = None
     for kind, cls in _CVSS_ORDER:
         vector = by_type.get(kind)
         if vector:
             try:
                 return vector, float(cls(vector).base_score)
             except CVSSError:
-                return vector, None
-    return None, None
+                first_bad = first_bad or vector
+    return first_bad, None

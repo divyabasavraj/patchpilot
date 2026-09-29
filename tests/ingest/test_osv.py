@@ -120,3 +120,16 @@ def test_missing_optional_fields_default_to_empty():
     adv = parse_osv(rec)
     assert adv.summary == "" and adv.details == ""
     assert adv.aliases == [] and adv.refs == [] and adv.ranges == []
+
+
+def test_bad_v3_falls_back_to_valid_v4():
+    rec = record(severity=[
+        {"type": "CVSS_V3", "score": "garbage"},
+        {"type": "CVSS_V4", "score": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N"},
+    ])
+    assert parse_osv(rec).cvss_score == 8.7
+
+
+def test_null_summary_and_details_become_empty():
+    adv = parse_osv(record(summary=None, details=None))
+    assert adv.summary == "" and adv.details == ""
