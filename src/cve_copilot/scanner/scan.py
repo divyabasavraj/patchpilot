@@ -65,6 +65,7 @@ def _finding(pin: Pin, group: list[Record], kev: set[str]) -> Finding | None:
         summary=main.summary or next((r.summary for r in group if r.summary), ""),
         cvss_score=max(scores) if scores else None,
         in_kev=bool(all_ids & kev),
+        is_malware=any(i.startswith("MAL-") for i in all_ids),
         fixed_versions=tuple(sorted(fixed, key=parse_version)),
         upgrade_to=lowest_above(v, fixed),
         notes=_notes(v, matched),

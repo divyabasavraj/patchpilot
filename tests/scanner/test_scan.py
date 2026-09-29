@@ -102,3 +102,20 @@ def test_safe_upgrade_none_when_no_fix():
     from cve_copilot.ingest.models import AffectedRange
     rec = Record("MAL-1", (), "", None, (AffectedRange("x", "0", None, None),), ())
     assert safe_upgrade("1.0", [rec]) is None
+
+
+def test_malware_flag_survives_grouping_with_a_ghsa(db):
+    report = scan("django==4.0\nevilpkg==1.0\n", db)
+    f = report.findings[0]
+    assert f.advisory_id == "GHSA-evil-1" and f.records == ("GHSA-evil-1", "MAL-2025-9")
+    assert f.is_malware and not f.in_kev                  # sorted before the KEV django finding
+    assert not any(g.is_malware for g in report.findings[1:])
+
+
+def test_group_where_only_one_copy_matches(db):
+    [f] = scan("onelib==1.5\n", db).findings
+    assert f.advisory_id == "PYSEC-one-1" and f.records == ("PYSEC-one-1",)
+    assert f.aliases == ("GHSA-one-1",)
+    assert f.cvss_score == 6.5 and f.upgrade_to == "2.0" and not f.is_malware
+    [f] = scan("onelib==0.5\n", db).findings
+    assert f.advisory_id == "GHSA-one-1" and f.records == ("GHSA-one-1", "PYSEC-one-1")

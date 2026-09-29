@@ -47,13 +47,10 @@ class Finding:
     summary: str
     cvss_score: float | None
     in_kev: bool
+    is_malware: bool                 # any ID or alias in the group is a MAL- (malicious package) ID
     fixed_versions: tuple[str, ...]  # oldest first
     upgrade_to: str | None           # lowest fixed version above the installed one
     notes: tuple[str, ...] = ()      # caveats, e.g. a range bound that is not a valid version
-
-    @property
-    def is_malware(self) -> bool:
-        return self.advisory_id.startswith("MAL-")
 
 
 @dataclass

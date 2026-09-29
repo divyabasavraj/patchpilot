@@ -30,6 +30,12 @@ ADVISORIES = [
     _adv("GHSA-old-1", "oldlib", [("1.0", None, "1.4")], score=4.0),
     _adv("GHSA-git-1", "gitlib", versions=["0.9", "1.0"], score=6.0),
     _adv("GHSA-bad-1", "badlib", [("2.6.0-cu124", "2.7", None), ("0", "1.0", None)], score=3.0),
+    # Malware also published as a GHSA: the group's main ID is the GHSA (real case: litellm).
+    _adv("GHSA-evil-1", "evilpkg", [("0", None, None)], score=9.0),
+    _adv("MAL-2025-9", "evilpkg", [("0", None, None)], aliases=["GHSA-evil-1"]),
+    # Same bug, but the two copies disagree on the fix: only PYSEC covers 1.5.
+    _adv("GHSA-one-1", "onelib", [("0", "1.0", None)], aliases=["PYSEC-one-1"], score=6.5),
+    _adv("PYSEC-one-1", "onelib", [("0", "2.0", None)], aliases=["GHSA-one-1"]),
     # Only bound is not PEP 440 (real example: pynetbox PYSEC-2024-325).
     _adv("PYSEC-net-1", "netlib", [("0", None, "4.1.0-NA")], score=5.5),
 ]

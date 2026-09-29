@@ -40,3 +40,11 @@ def test_cli_prints_notes_about_bad_advisory_versions(tmp_path, monkeypatch, cap
     out = capsys.readouterr().out
     assert "Notes:" in out
     assert "PYSEC-net-1: advisory version '4.1.0-NA' is not a valid version; read as 4.1.0" in out
+
+
+def test_cli_flags_malware_even_when_the_main_id_is_a_ghsa(tmp_path, monkeypatch, capsys):
+    req = setup(tmp_path, monkeypatch, "django==4.0\nevilpkg==1.0\n")
+    build_fixture_db(tmp_path / "data" / "live" / "cve.db")
+    main([str(req)])
+    first_row = capsys.readouterr().out.splitlines()[3]
+    assert "GHSA-evil-1" in first_row and "MALWARE" in first_row
