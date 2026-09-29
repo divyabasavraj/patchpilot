@@ -145,11 +145,39 @@ Format: **what I decided → options considered → why → trade-off.** These m
 ### D13. CVSS preference: v3, then v4, then v2 (2026-09-27)
 - **Why:** v3 is the most common (~9.6k records), so scores are comparable across advisories.
 
+### D14. Frozen snapshot packages are chosen for feature coverage (2026-09-29)
+Besides the packages the exams ask about, the snapshot deliberately includes packages with KEV-listed CVEs and with injection-flagged advisories, so CI can test the KEV badge and the injection guard. Random distractors alone gave 1 KEV entry and 0 flagged docs.
+
 ---
 
 ## 5. Daily journal
 
 *Newest entry first. One entry per work day.*
+
+### Day 5 — 2026-09-29: Phase 1 reviewed and merged
+**What I did**
+- Did a final code review of the whole Phase 1 branch before merging. Findings:
+  - **Frozen CI data was too thin:** only 1 KEV entry and 0 injection-flagged advisories. Later phases (KEV badge, Phase 5 guard) would have had nothing to test in CI. Added 5 packages to `data/frozen/packages.txt` on purpose: `starlette`, `litellm`, `langflow` (have KEV-listed CVEs) and `langroid`, `mcp-atlassian` (have flagged advisories). Picked them by querying the live database for packages with KEV hits, preferring small ones.
+  - A `null` summary in an OSV record would have crashed the whole build (the injection scan ran outside the "skip malformed" guard). 0 such records exist today; fixed anyway, with a test.
+  - A broken CVSS v3 string used to hide a valid v4 score; now it falls through to the next version, with a test.
+- Rebuilt the frozen snapshot (numbers from `data/frozen/db/manifest.json`):
+
+  | Raw files | Advisories | Withdrawn | Malformed | Malware | Indexed | Flagged | KEV | Size | Build time |
+  |---|---|---|---|---|---|---|---|---|---|
+  | 1,517 | 1,475 | 42 | 0 | 222 | 1,253 | 4 | 11 | 8.1 MB | 1 min 35 s |
+
+- Merged `phase1-data-ingest` into `main`. 58 tests pass on the merged result.
+
+**What I learned**
+- Test data needs to *cover the features*, not just be a random sample. A snapshot that looks realistic can still have zero examples of the thing you want to test. Picking a few packages deliberately fixed it.
+- Only 41 PyPI advisories in the whole live database are linked to a KEV entry. "Actively exploited" is rare for Python packages, which makes it a strong urgency signal when it does appear.
+- Answer to Day 4's open question: no, 1 KEV entry was not enough; the snapshot now includes KEV-listed packages on purpose.
+
+**Open questions**
+- Should I put the repo on GitHub now and switch to one pull request per phase, or wait until the scanner works?
+
+**Next**
+- Phase 2: write the plan for the scanner (read `requirements.txt`, compare versions against affected ranges), then build it test-first.
 
 ### Day 4 — 2026-09-28: Phase 1 built (data ingest)
 **What I did**
@@ -279,6 +307,7 @@ The CI machine doesn't run the model. It calls GitHub Models' free tier. Code ch
 | 2026-09-27 | Rebuilding the Chroma index into the same folder failed: "Collection [advisories] already exists" | Chroma caches one client per folder path; after the folder was renamed and recreated, it still used the old cached one | Call `client.clear_system_cache()` after each build (found while planning, reproduced in a scratch test) | Test how a library behaves on *re-runs*, not just the first run. Nightly jobs re-run forever |
 | 2026-09-28 | Retry test crashed: "Cannot call `raise_for_status` as the request instance has not been set" | httpx's `raise_for_status()` needs the original request attached, even on a 200 reply; the test's fake replies had none | Only call `raise_for_status()` when the reply is actually an error (`resp.is_error`) | Fakes in tests can be "thinner" than real objects; write code that only relies on what it needs |
 | 2026-09-28 | Injection scanner flagged 15 real advisories | Advisories *about* AI tools quote attack text like "ignore previous instructions" | Kept as a known trade-off: flagged docs are stored, only hidden from the LLM | A security filter always has false positives; measure them and decide consciously |
+| 2026-09-29 | Code review found the frozen CI data had 1 KEV entry and 0 flagged advisories | The snapshot picked packages for exam questions plus random extras; KEV and flagged advisories are rare, so none were picked | Added 5 packages chosen by querying the live DB for KEV hits and flagged docs; now 11 KEV, 4 flagged | Check that test data contains examples of every feature you plan to test |
 
 ---
 
