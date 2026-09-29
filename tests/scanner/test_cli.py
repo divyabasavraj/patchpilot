@@ -48,3 +48,12 @@ def test_cli_flags_malware_even_when_the_main_id_is_a_ghsa(tmp_path, monkeypatch
     main([str(req)])
     first_row = capsys.readouterr().out.splitlines()[3]
     assert "GHSA-evil-1" in first_row and "MALWARE" in first_row
+
+
+def test_cli_upgrade_wording(tmp_path, monkeypatch, capsys):
+    req = setup(tmp_path, monkeypatch, "mixlib==1.0\nreqeusts==1.0\n")
+    build_fixture_db(tmp_path / "data" / "live" / "cve.db")
+    main([str(req)])
+    out = capsys.readouterr().out
+    assert "  mixlib 1.0 -> 1.5 (still affected by: GHSA-mix-2 \u2014 no fix known)" in out
+    assert "  reqeusts 1.0: no fixed version known" in out

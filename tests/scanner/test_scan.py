@@ -1,7 +1,8 @@
 import pytest
 
 from cve_copilot.scanner import scan
-from cve_copilot.scanner.models import Record
+from cve_copilot.ingest.models import AffectedRange
+from cve_copilot.scanner.models import Record, Upgrade
 from cve_copilot.scanner.scan import group_records, safe_upgrade
 from tests.scanner.fixture_db import build_fixture_db
 
@@ -34,7 +35,7 @@ def test_upgrade_on_the_second_branch(db):
 
 
 def test_safe_upgrade_skips_versions_hit_by_other_advisories(db):
-    assert scan("flask==2.2.0\n", db).upgrades == {"flask": "3.1.3"}
+    assert scan("flask==2.2.0\n", db).upgrades == {"flask": Upgrade("3.1.3", ())}
 
 
 def test_fixed_version_has_no_findings(db):
@@ -58,7 +59,7 @@ def test_sort_malware_then_kev_then_cvss(db):
 def test_no_fix_known(db):
     report = scan("reqeusts==1.0\n", db)
     assert report.findings[0].upgrade_to is None
-    assert report.upgrades == {"reqeusts": None}
+    assert report.upgrades == {"reqeusts": Upgrade(None, ("MAL-2024-1",))}
 
 
 def test_last_affected_and_versions_only(db):
@@ -98,10 +99,40 @@ def test_group_records_links_through_shared_aliases():
     assert [[r.id for r in g] for g in group_records([a, b, c])] == [["GHSA-a", "PYSEC-b"], ["GHSA-c"]]
 
 
+def rec(id, *ranges, aliases=()):
+    return Record(id, aliases, "", None, tuple(AffectedRange("x", *r) for r in ranges), ())
+
+
 def test_safe_upgrade_none_when_no_fix():
-    from cve_copilot.ingest.models import AffectedRange
-    rec = Record("MAL-1", (), "", None, (AffectedRange("x", "0", None, None),), ())
-    assert safe_upgrade("1.0", [rec]) is None
+    assert safe_upgrade("1.0", [rec("MAL-1", ("0", None, None))]) == Upgrade(None, ("MAL-1",))
+
+
+def test_upgrade_still_offered_when_an_unfixed_advisory_remains(db):
+    assert scan("mixlib==1.0\n", db).upgrades == {"mixlib": Upgrade("1.5", ("GHSA-mix-2",))}
+
+
+def test_upgrade_picks_the_candidate_hit_by_fewest_advisories():
+    records = [rec("GHSA-a", ("0", "2.0", None)),       # fixed in 2.0
+               rec("GHSA-b", ("0", "1.1", None)),       # fixed in 1.1 ...
+               rec("GHSA-c", ("2.0", "2.1", None))]     # ... but 2.0 brings a new bug
+    assert safe_upgrade("1.0", records) == Upgrade("2.1", ())
+    records.append(rec("GHSA-d", ("0", None, None)))   # never fixed: every candidate keeps it
+    assert safe_upgrade("1.0", records) == Upgrade("2.1", ("GHSA-d",))
+
+
+def test_upgrade_ties_prefer_final_releases_then_lowest():
+    # GHSA-b is on another branch (3.0 up to 3.1), so its fix is a candidate too and both clear everything.
+    assert safe_upgrade("1.0", [rec("GHSA-a", ("0", "2.0rc1", None)),
+                                rec("GHSA-b", ("3.0", "3.1", None))]) == Upgrade("3.1", ())
+    assert safe_upgrade("1.0", [rec("GHSA-a", ("0", "1.5", None)),
+                                rec("GHSA-b", ("3.0", "3.1", None))]) == Upgrade("1.5", ())
+
+
+def test_upgrade_still_affected_uses_the_main_id():
+    records = [rec("PYSEC-1", ("0", None, None), aliases=("GHSA-1",)),
+               rec("GHSA-1", ("0", None, None), aliases=("PYSEC-1",)),
+               rec("GHSA-2", ("0", "3.0", None))]
+    assert safe_upgrade("1.0", records) == Upgrade("3.0", ("GHSA-1",))
 
 
 def test_malware_flag_survives_grouping_with_a_ghsa(db):

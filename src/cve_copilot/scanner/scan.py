@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .db import kev_ids, load_records, open_db
 from .matching import in_range, is_affected, lowest_above, parse_version, range_notes, read_bound
-from .models import Finding, Pin, Record, ScanReport
+from .models import Finding, Pin, Record, ScanReport, Upgrade
 from .requirements import parse_requirements
 
 _ID_RANK = {"GHSA": 0, "PYSEC": 1}   # which ID to show first when a bug has several
@@ -72,14 +72,24 @@ def _finding(pin: Pin, group: list[Record], kev: set[str]) -> Finding | None:
     )
 
 
-def safe_upgrade(version: str, records: list[Record]) -> str | None:
-    """Lowest known fixed version above `version` that no known advisory affects."""
+def _affecting(v, groups: list[list[Record]]) -> tuple[str, ...]:
+    """Main IDs of the advisory groups that affect version v, sorted."""
+    return tuple(sorted(_main_id(hit) for g in groups
+                        if (hit := [r.id for r in g if is_affected(v, r.ranges, r.versions)])))
+
+
+def safe_upgrade(version: str, records: list[Record]) -> Upgrade:
+    """The known fixed version above `version` hit by the fewest of the package's advisories
+    (ties: final releases first, then lowest), and what still affects it."""
     v = parse_version(version)
+    groups = group_records(records)
     candidates = [(pv, f) for f in _fixes(records) if (pv := parse_version(f)) > v]
-    for pv, f in sorted(candidates):
-        if not any(is_affected(pv, r.ranges, r.versions) for r in records):
-            return f
-    return None
+    if not candidates:
+        return Upgrade(None, _affecting(v, groups))
+    scored = [(len(still := _affecting(pv, groups)), pv.is_prerelease, pv, f, still)
+              for pv, f in candidates]
+    *_, best, still = min(scored)
+    return Upgrade(best, still)
 
 
 def _sort_key(f: Finding):
@@ -89,7 +99,7 @@ def _sort_key(f: Finding):
 def scan(text: str, db_path: Path) -> ScanReport:
     parsed = parse_requirements(text)
     findings: list[Finding] = []
-    upgrades: dict[str, str | None] = {}
+    upgrades: dict[str, Upgrade] = {}
     with closing(open_db(db_path)) as con:
         for pin in parsed.pins:
             records = load_records(con, pin.name)

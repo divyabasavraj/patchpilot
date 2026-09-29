@@ -36,6 +36,9 @@ ADVISORIES = [
     # Same bug, but the two copies disagree on the fix: only PYSEC covers 1.5.
     _adv("GHSA-one-1", "onelib", [("0", "1.0", None)], aliases=["PYSEC-one-1"], score=6.5),
     _adv("PYSEC-one-1", "onelib", [("0", "2.0", None)], aliases=["GHSA-one-1"]),
+    # One bug fixed in 1.5, one never fixed: upgrading still helps.
+    _adv("GHSA-mix-1", "mixlib", [("0", "1.5", None)], score=7.0),
+    _adv("GHSA-mix-2", "mixlib", [("0", None, None)], score=4.0),
     # Only bound is not PEP 440 (real example: pynetbox PYSEC-2024-325).
     _adv("PYSEC-net-1", "netlib", [("0", None, "4.1.0-NA")], score=5.5),
 ]

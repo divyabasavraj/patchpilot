@@ -4,8 +4,16 @@ import sys
 from pathlib import Path
 
 from ..config import Settings
-from .models import ScanReport
+from .models import ScanReport, Upgrade
 from .scan import scan
+
+
+def _upgrade_text(up: Upgrade) -> str:
+    if up.version is None:
+        return ": no fixed version known"
+    if up.still_affected:
+        return f" -> {up.version} (still affected by: {', '.join(up.still_affected)} \u2014 no fix known)"
+    return f" -> {up.version}"
 
 
 def format_report(report: ScanReport) -> str:
@@ -20,9 +28,7 @@ def format_report(report: ScanReport) -> str:
                          f"{flag:<7}  {f.upgrade_to or 'no fix known'}")
         lines += ["", "Suggested upgrades:"]
         versions = {p.name: p.version for p in report.checked}
-        for pkg, target in report.upgrades.items():
-            lines.append(f"  {pkg} {versions[pkg]} -> {target}" if target
-                         else f"  {pkg} {versions[pkg]}: no fixed version known")
+        lines += [f"  {pkg} {versions[pkg]}{_upgrade_text(up)}" for pkg, up in report.upgrades.items()]
         notes = [f"{f.package} {f.version}: {n}" for f in report.findings for n in f.notes]
         if notes:
             lines += ["", "Notes:"] + [f"  {n}" for n in notes]

@@ -53,10 +53,17 @@ class Finding:
     notes: tuple[str, ...] = ()      # caveats, e.g. a range bound that is not a valid version
 
 
+@dataclass(frozen=True)
+class Upgrade:
+    """Suggested version for one vulnerable package."""
+    version: str | None               # None: no fixed version known
+    still_affected: tuple[str, ...]   # main IDs of advisories that still affect `version`
+
+
 @dataclass
 class ScanReport:
     findings: list[Finding]
     checked: list[Pin]
     not_pinned: list[LineNote]
     skipped: list[LineNote]
-    upgrades: dict[str, str | None]  # vulnerable package -> lowest version with no known advisory
+    upgrades: dict[str, Upgrade]     # vulnerable package -> suggested upgrade
