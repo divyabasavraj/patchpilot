@@ -30,6 +30,8 @@ ADVISORIES = [
     _adv("GHSA-old-1", "oldlib", [("1.0", None, "1.4")], score=4.0),
     _adv("GHSA-git-1", "gitlib", versions=["0.9", "1.0"], score=6.0),
     _adv("GHSA-bad-1", "badlib", [("2.6.0-cu124", "2.7", None), ("0", "1.0", None)], score=3.0),
+    # Only bound is not PEP 440 (real example: pynetbox PYSEC-2024-325).
+    _adv("PYSEC-net-1", "netlib", [("0", None, "4.1.0-NA")], score=5.5),
 ]
 KEV = [KevEntry("CVE-2024-9", "2024-05-01", "Unknown")]
 

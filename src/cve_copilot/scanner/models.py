@@ -49,6 +49,7 @@ class Finding:
     in_kev: bool
     fixed_versions: tuple[str, ...]  # oldest first
     upgrade_to: str | None           # lowest fixed version above the installed one
+    notes: tuple[str, ...] = ()      # caveats, e.g. a range bound that is not a valid version
 
     @property
     def is_malware(self) -> bool:

@@ -4,7 +4,7 @@ from contextlib import closing
 from pathlib import Path
 
 from .db import kev_ids, load_records, open_db
-from .matching import is_affected, lowest_above, parse_version
+from .matching import in_range, is_affected, lowest_above, parse_version, range_notes, read_bound
 from .models import Finding, Pin, Record, ScanReport
 from .requirements import parse_requirements
 
@@ -36,7 +36,14 @@ def _main_id(ids: list[str]) -> str:
 
 
 def _fixes(records: list[Record]) -> set[str]:
-    return {rng.fixed for r in records for rng in r.ranges if rng.fixed}
+    """Fixed versions as usable version strings (salvaged when not PEP 440)."""
+    return {b for r in records for rng in r.ranges if rng.fixed and (b := read_bound(rng.fixed))}
+
+
+def _notes(v, matched: list[Record]) -> tuple[str, ...]:
+    """Notes for bad bounds in the ranges that made this version match."""
+    notes = [n for r in matched for rng in r.ranges if in_range(v, rng) for n in range_notes(r.id, rng)]
+    return tuple(dict.fromkeys(notes))
 
 
 def _finding(pin: Pin, group: list[Record], kev: set[str]) -> Finding | None:
@@ -58,15 +65,16 @@ def _finding(pin: Pin, group: list[Record], kev: set[str]) -> Finding | None:
         summary=main.summary or next((r.summary for r in group if r.summary), ""),
         cvss_score=max(scores) if scores else None,
         in_kev=bool(all_ids & kev),
-        fixed_versions=tuple(sorted((f for f in fixed if parse_version(f)), key=parse_version)),
+        fixed_versions=tuple(sorted(fixed, key=parse_version)),
         upgrade_to=lowest_above(v, fixed),
+        notes=_notes(v, matched),
     )
 
 
 def safe_upgrade(version: str, records: list[Record]) -> str | None:
     """Lowest known fixed version above `version` that no known advisory affects."""
     v = parse_version(version)
-    candidates = [(pv, f) for f in _fixes(records) if (pv := parse_version(f)) is not None and pv > v]
+    candidates = [(pv, f) for f in _fixes(records) if (pv := parse_version(f)) > v]
     for pv, f in sorted(candidates):
         if not any(is_affected(pv, r.ranges, r.versions) for r in records):
             return f

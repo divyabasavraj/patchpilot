@@ -23,6 +23,9 @@ def format_report(report: ScanReport) -> str:
         for pkg, target in report.upgrades.items():
             lines.append(f"  {pkg} {versions[pkg]} -> {target}" if target
                          else f"  {pkg} {versions[pkg]}: no fixed version known")
+        notes = [f"{f.package} {f.version}: {n}" for f in report.findings for n in f.notes]
+        if notes:
+            lines += ["", "Notes:"] + [f"  {n}" for n in notes]
     else:
         lines.append("No known vulnerabilities in the pinned packages.")
     for title, notes in (("Not checked", report.not_pinned), ("Skipped", report.skipped)):

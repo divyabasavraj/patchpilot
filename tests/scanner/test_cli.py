@@ -31,3 +31,12 @@ def test_cli_missing_db(tmp_path, monkeypatch, capsys):
     req = setup(tmp_path, monkeypatch, "flask==2.2.0\n")
     assert main([str(req)]) == 2
     assert "Build it first" in capsys.readouterr().err
+
+
+def test_cli_prints_notes_about_bad_advisory_versions(tmp_path, monkeypatch, capsys):
+    req = setup(tmp_path, monkeypatch, "netlib==4.0.0\n")
+    build_fixture_db(tmp_path / "data" / "live" / "cve.db")
+    assert main([str(req)]) == 1
+    out = capsys.readouterr().out
+    assert "Notes:" in out
+    assert "PYSEC-net-1: advisory version '4.1.0-NA' is not a valid version; read as 4.1.0" in out

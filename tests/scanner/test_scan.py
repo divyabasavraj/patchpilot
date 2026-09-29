@@ -69,8 +69,19 @@ def test_last_affected_and_versions_only(db):
 
 
 def test_bad_version_in_db_does_not_crash(db):
-    assert ids(scan("badlib==2.6.5\n", db)) == []             # broken range ignored
-    assert ids(scan("badlib==0.5\n", db)) == ["GHSA-bad-1"]   # the valid range still works
+    [f] = scan("badlib==2.6.5\n", db).findings               # "2.6.0-cu124" read as 2.6.0
+    assert f.advisory_id == "GHSA-bad-1" and f.upgrade_to == "2.7"
+    assert f.notes == ("GHSA-bad-1: advisory version '2.6.0-cu124' is not a valid version; read as 2.6.0",)
+    [f] = scan("badlib==0.5\n", db).findings                 # the valid range still works
+    assert f.advisory_id == "GHSA-bad-1" and f.notes == ()
+    assert ids(scan("badlib==2.5\n", db)) == []
+
+
+def test_last_affected_that_is_not_a_version_still_matches(db):
+    [f] = scan("netlib==4.0.0\n", db).findings
+    assert f.advisory_id == "PYSEC-net-1"
+    assert f.notes == ("PYSEC-net-1: advisory version '4.1.0-NA' is not a valid version; read as 4.1.0",)
+    assert ids(scan("netlib==4.1.1\n", db)) == []
 
 
 def test_unknown_package_and_line_notes_pass_through(db):
