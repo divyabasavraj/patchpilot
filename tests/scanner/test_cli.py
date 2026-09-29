@@ -57,3 +57,20 @@ def test_cli_upgrade_wording(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "  mixlib 1.0 -> 1.5 (still affected by: GHSA-mix-2 \u2014 no fix known)" in out
     assert "  reqeusts 1.0: no fixed version known" in out
+
+
+def test_cli_reads_a_utf16_file(tmp_path, monkeypatch, capsys):
+    req = setup(tmp_path, monkeypatch, "")
+    req.write_bytes(b"\xff\xfe" + "flask==2.2.0\r\n".encode("utf-16-le"))
+    build_fixture_db(tmp_path / "data" / "live" / "cve.db")
+    assert main([str(req)]) == 1
+    assert "flask 2.2.0 -> 3.1.3" in capsys.readouterr().out
+
+
+def test_cli_nothing_checked_exits_2(tmp_path, monkeypatch, capsys):
+    req = setup(tmp_path, monkeypatch, "flask\n-r base.txt\n")
+    build_fixture_db(tmp_path / "data" / "live" / "cve.db")
+    assert main([str(req)]) == 2
+    out = capsys.readouterr().out
+    assert "Nothing was checked: no pinned requirements found." in out
+    assert "line 1" in out and "line 2" in out                 # the reasons are still shown

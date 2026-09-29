@@ -5,6 +5,7 @@ from pathlib import Path
 
 from ..config import Settings
 from .models import ScanReport, Upgrade
+from .requirements import decode_requirements
 from .scan import scan
 
 
@@ -32,8 +33,10 @@ def format_report(report: ScanReport) -> str:
         notes = [f"{f.package} {f.version}: {n}" for f in report.findings for n in f.notes]
         if notes:
             lines += ["", "Notes:"] + [f"  {n}" for n in notes]
-    else:
+    elif report.checked:
         lines.append("No known vulnerabilities in the pinned packages.")
+    else:
+        lines.append("Nothing was checked: no pinned requirements found.")
     for title, notes in (("Not checked", report.not_pinned), ("Skipped", report.skipped)):
         if notes:
             lines += ["", f"{title}:"]
@@ -48,12 +51,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     db_path = Settings.from_env().db_dir(args.target) / "cve.db"
     try:
-        text = args.requirements.read_text(encoding="utf-8-sig", errors="replace")
+        text = decode_requirements(args.requirements.read_bytes())
         report = scan(text, db_path)
     except FileNotFoundError as e:
         print(e, file=sys.stderr)
         return 2
     print(format_report(report))
+    if not report.checked and text.strip():
+        return 2
     return 1 if report.findings else 0
 
 

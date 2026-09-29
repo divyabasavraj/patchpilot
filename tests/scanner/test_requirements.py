@@ -1,5 +1,5 @@
 from cve_copilot.scanner.models import Pin
-from cve_copilot.scanner.requirements import parse_requirements
+from cve_copilot.scanner.requirements import decode_requirements, parse_requirements
 
 
 def pins(text):
@@ -90,3 +90,13 @@ def test_continued_lines_are_joined_like_pip():
     assert pins("fla\\\nsk==2.2.0\n") == [("flask", "2.2.0", 1)]
     # A comment line ends a continuation (the comment is dropped, the requirement kept).
     assert pins("flask==2.2.0 \\\n# note\njinja2==3.1.2\n") == [("flask", "2.2.0", 1), ("jinja2", "3.1.2", 3)]
+
+
+def test_decode_requirements():
+    text = "flask==2.2.0\r\n"
+    assert decode_requirements(text.encode("utf-8")) == text
+    assert decode_requirements(b"\xef\xbb\xbf" + text.encode("utf-8")) == text
+    assert decode_requirements(text.encode("utf-16")) == text          # BOM + native order
+    assert decode_requirements(b"\xff\xfe" + text.encode("utf-16-le")) == text
+    assert decode_requirements(b"\xfe\xff" + text.encode("utf-16-be")) == text
+    assert decode_requirements(b"flask==2.2.0 # caf\xe9\n") == "flask==2.2.0 # caf\ufffd\n"

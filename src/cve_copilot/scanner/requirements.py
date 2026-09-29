@@ -1,4 +1,5 @@
 """Read a requirements.txt into pinned packages, unpinned lines and skipped lines."""
+import codecs
 import re
 from collections.abc import Iterator
 
@@ -12,6 +13,16 @@ _COMMENT = re.compile(r"(^|\s)#.*$")       # "#" at the start or after a space (
 _COMMENT_LINE = re.compile(r"\s*#")        # a whole-line comment (pip never continues it)
 _HASH = re.compile(r"\s--hash[=\s]\S+")    # pip-compile: --hash=sha256:...
 _VCS = ("git+", "hg+", "svn+", "bzr+")
+
+
+def decode_requirements(data: bytes) -> str:
+    """File bytes to text: UTF-8 (BOM optional), UTF-16 when it starts with a UTF-16 BOM,
+    otherwise UTF-8 with undecodable bytes replaced."""
+    if data.startswith(codecs.BOM_UTF8):
+        return data[len(codecs.BOM_UTF8):].decode("utf-8", errors="replace")
+    if data.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        return data.decode("utf-16", errors="replace")
+    return data.decode("utf-8", errors="replace")
 
 
 def _logical_lines(text: str) -> Iterator[tuple[int, str]]:
