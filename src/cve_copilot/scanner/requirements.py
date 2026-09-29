@@ -9,25 +9,28 @@ from packaging.version import InvalidVersion, Version
 from .models import LineNote, ParsedRequirements, Pin
 
 _COMMENT = re.compile(r"(^|\s)#.*$")       # "#" at the start or after a space (not inside URLs)
+_COMMENT_LINE = re.compile(r"\s*#")        # a whole-line comment (pip never continues it)
 _HASH = re.compile(r"\s--hash[=\s]\S+")    # pip-compile: --hash=sha256:...
 _VCS = ("git+", "hg+", "svn+", "bzr+")
 
 
 def _logical_lines(text: str) -> Iterator[tuple[int, str]]:
-    """Yield (first line number, text), joining lines that end with a backslash."""
+    """Yield (first line number, text), joining lines that end with a backslash like pip:
+    parts are joined with no separator, and a comment line is never continued."""
     parts: list[str] = []
     start = 0
-    for no, raw in enumerate(text.lstrip("﻿").splitlines(), start=1):
+    for no, raw in enumerate(text.lstrip("\ufeff").splitlines(), start=1):
         if not parts:
             start = no
-        if raw.endswith("\\"):
+        comment = _COMMENT_LINE.match(raw) is not None
+        if raw.endswith("\\") and not comment:
             parts.append(raw[:-1])
             continue
-        parts.append(raw)
-        yield start, " ".join(parts)
+        parts.append(" " + raw if comment else raw)
+        yield start, "".join(parts)
         parts = []
     if parts:
-        yield start, " ".join(parts)
+        yield start, "".join(parts)
 
 
 def parse_requirements(text: str) -> ParsedRequirements:

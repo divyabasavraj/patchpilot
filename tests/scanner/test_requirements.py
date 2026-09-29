@@ -80,3 +80,13 @@ def test_never_crashes_on_odd_input():
     text = "\\\n==\n[extras]\n;\n@\nflask==\n"
     parsed = parse_requirements(text)
     assert parsed.pins == []
+
+
+def test_comment_ending_in_backslash_does_not_swallow_the_next_line():
+    assert pins("# path C:\\\nrequests==2.19.0\n") == [("requests", "2.19.0", 2)]
+
+
+def test_continued_lines_are_joined_like_pip():
+    assert pins("fla\\\nsk==2.2.0\n") == [("flask", "2.2.0", 1)]
+    # A comment line ends a continuation (the comment is dropped, the requirement kept).
+    assert pins("flask==2.2.0 \\\n# note\njinja2==3.1.2\n") == [("flask", "2.2.0", 1), ("jinja2", "3.1.2", 3)]
