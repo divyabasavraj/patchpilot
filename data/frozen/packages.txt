@@ -14,3 +14,10 @@ paramiko
 lxml
 setuptools
 gunicorn
+# Known-exploited (CISA KEV) coverage, so CI can test the KEV badge
+starlette
+litellm
+langflow
+# Advisories the injection scanner flags, so CI can test the Phase 5 guard
+langroid
+mcp-atlassian
