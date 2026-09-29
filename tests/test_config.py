@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from cve_copilot.config import PROJECT_ROOT, Settings
 
 
@@ -26,3 +28,12 @@ def test_env_overrides(monkeypatch, tmp_path):
 
 def test_project_root_contains_pyproject():
     assert (PROJECT_ROOT / "pyproject.toml").exists()
+
+
+def test_db_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("CVE_DATA_DIR", str(tmp_path))
+    s = Settings.from_env()
+    assert s.db_dir("live") == tmp_path / "live"
+    assert s.db_dir("frozen") == tmp_path / "frozen" / "db"
+    with pytest.raises(ValueError):
+        s.db_dir("other")

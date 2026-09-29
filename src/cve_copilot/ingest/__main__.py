@@ -21,7 +21,8 @@ def main(argv: list[str] | None = None, *, embed_fn=None, downloader=None) -> in
     if embed_fn is None:
         from ..embeddings import embed as embed_fn
     downloader = downloader or download
-    data_dir = Settings.from_env().data_dir
+    settings = Settings.from_env()
+    data_dir = settings.data_dir
 
     if args.target == "live":
         with tempfile.TemporaryDirectory() as tmp:
@@ -35,7 +36,7 @@ def main(argv: list[str] | None = None, *, embed_fn=None, downloader=None) -> in
             sources = {"osv": {"url": OSV_URL, "sha256": osv_sha},
                        "kev": {"url": KEV_URL, "sha256": kev_sha}}
             manifest = build(iter_osv_files(osv_zip), json.loads(kev_file.read_bytes()),
-                             data_dir / "live", embed_fn=embed_fn, sources=sources)
+                             settings.db_dir("live"), embed_fn=embed_fn, sources=sources)
     else:
         raw = data_dir / "frozen" / "raw"
         kev_bytes = (raw / "kev.json").read_bytes()
@@ -43,7 +44,7 @@ def main(argv: list[str] | None = None, *, embed_fn=None, downloader=None) -> in
                    "kev": {"file": "data/frozen/raw/kev.json",
                            "sha256": hashlib.sha256(kev_bytes).hexdigest()}}
         manifest = build(iter_osv_files(raw / "osv"), json.loads(kev_bytes),
-                         data_dir / "frozen" / "db", embed_fn=embed_fn, sources=sources)
+                         settings.db_dir("frozen"), embed_fn=embed_fn, sources=sources)
 
     print(json.dumps(manifest, indent=2))
     return 0
