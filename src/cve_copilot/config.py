@@ -30,3 +30,11 @@ class Settings:
             github_model=env("GITHUB_MODEL", "openai/gpt-4o-mini"),
             github_token=env("GITHUB_TOKEN"),
         )
+
+    def db_dir(self, target: str) -> Path:
+        """Folder holding cve.db, chroma/ and manifest.json for a build target."""
+        if target == "live":
+            return self.data_dir / "live"
+        if target == "frozen":
+            return self.data_dir / "frozen" / "db"
+        raise ValueError(f"Unknown target {target!r} (use live or frozen)")
