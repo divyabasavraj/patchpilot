@@ -32,6 +32,7 @@ def test_citation_accuracy_counts_invented_ids(tmp_path, monkeypatch):
     assert a["grounded"] is False and "9.9.9" in a["judge_reason"]
     assert b["outcome"] == "not_found" and b["correct"] is True and b["grounded"] is True
     assert result["citation_accuracy"] == 0.5
+    assert result["citation_coverage"] == 1.0         # the one generated answer cites something
     assert result["groundedness"] == 0.5
     assert result["answer_correctness"] == 1.0
     assert result["version_accuracy"] == 0.5

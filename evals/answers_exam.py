@@ -2,8 +2,8 @@
 
     uv run python -m evals.answers_exam [--target frozen|live]
 
-Pass marks: citation accuracy >= 98%, groundedness >= 90%. Answer correctness and version
-accuracy are reported without a pass mark for now.
+Pass marks: citation accuracy >= 98%, groundedness >= 90%. Citation coverage (answers that
+cite at least one ID), answer correctness and version accuracy are reported without a pass mark.
 """
 import argparse
 import json
@@ -96,10 +96,13 @@ def run(cases_path: Path, db_dir: Path, *, embed_fn: EmbedFn = embed,
     versions = sum(len(r["versions"]) for r in results)
     unsupported = sum(len(r["unsupported_versions"]) for r in results)
     n = len(results) or 1
+    answered = [r for r in results if r["outcome"] == "answered"]
     return {
         "metric": "answers",
         "items": len(results),
         "citation_accuracy": round(1 - errors / cited, 4) if cited else 1.0,
+        "citation_coverage": round(sum(bool(r["cited"]) for r in answered) / len(answered), 4)
+                             if answered else 1.0,
         "groundedness": round(sum(r["grounded"] for r in results) / n, 4),
         "answer_correctness": round(sum(r["correct"] for r in results) / n, 4),
         "version_accuracy": round(1 - unsupported / versions, 4) if versions else 1.0,

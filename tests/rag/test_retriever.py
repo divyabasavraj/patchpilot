@@ -110,3 +110,15 @@ def test_rare_shared_word_lifts_a_doc():
     scores = keyword_scores("heap overflow in pillow webp decoding", docs)
     assert scores["C"] > scores["A"] == scores["B"] > 0
     assert keyword_scores("the and of", docs) == {"A": 0.0, "B": 0.0, "C": 0.0}
+
+
+def test_version_list_hidden_when_a_range_exists(tmp_path):
+    from cve_copilot.ingest.models import Advisory, AffectedRange
+    from cve_copilot.ingest.store import write_db
+    adv = Advisory("PYSEC-x", "s", "", None, None, None, None,
+                   ranges=[AffectedRange("lib", "0", "2.0", None)],
+                   versions=[("lib", "1.0"), ("lib", "1.1"), ("other", "0.1")])
+    write_db(tmp_path / "cve.db", [adv], [])
+    with closing(open_db(tmp_path / "cve.db")) as con:
+        [doc] = load_docs(con, ["PYSEC-x"])
+    assert doc.affected == ("lib: from 0, fixed in 2.0", "other: versions 0.1")
