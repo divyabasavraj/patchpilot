@@ -97,3 +97,16 @@ def test_package_names(db_dir):
 def test_missing_db_says_build_it_first(tmp_path):
     with pytest.raises(FileNotFoundError, match="Build it first"):
         ask(Route("id", ids=("CVE-2023-1",)), "q", tmp_path)
+
+
+def test_rare_shared_word_lifts_a_doc():
+    from cve_copilot.rag.models import Doc
+    from cve_copilot.rag.retriever import keyword_scores
+
+    def doc(i, summary):
+        return Doc(i, (), ("pillow",), summary, "", None, False, False, None, ())
+    docs = [doc("A", "heap overflow in pillow"), doc("B", "heap overflow in pillow"),
+            doc("C", "libwebp overflow in pillow")]
+    scores = keyword_scores("heap overflow in pillow webp decoding", docs)
+    assert scores["C"] > scores["A"] == scores["B"] > 0
+    assert keyword_scores("the and of", docs) == {"A": 0.0, "B": 0.0, "C": 0.0}

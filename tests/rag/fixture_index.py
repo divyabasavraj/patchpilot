@@ -32,7 +32,7 @@ ADVISORIES = [
     _adv("PYSEC-2023-1", "flask", "", [("0", "2.2.5", None)], aliases=["CVE-2023-1", "GHSA-sess-1"],
          details="session session"),
     _adv("GHSA-pin-1", "werkzeug", "Debugger pin is guessable", [("0", "0.15.3", None)],
-         aliases=["CVE-2019-2"], score=7.0),
+         aliases=["CVE-2019-2222"], score=7.0),
     # Django: one KEV-listed bug (through its CVE alias), two others.
     _adv("GHSA-sql-1", "django", "SQL injection in the ORM", [("0", "4.2.1", None)],
          aliases=["CVE-2024-9999"], score=9.8),

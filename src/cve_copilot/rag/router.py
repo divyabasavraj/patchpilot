@@ -19,12 +19,26 @@ AMBIGUOUS = frozenset("""
     horizon intake keep late lightning llm markdown max notebook paste pip plane planet
     priority reflex safety salt sentry signify spam styling supervisor swift trickery
     trove tutor weave wheel""".split())
-_ROUTER_PROMPT = (
-    "You route questions for an assistant that answers questions about security "
-    "vulnerabilities in Python packages. Reply with JSON only: {\"route\": \"concept\"} "
-    "if answering needs a search of the vulnerability database (a kind of bug, attack or "
-    "security problem), or {\"route\": \"chat\"} if it does not (greetings, thanks, "
-    "general definitions such as 'what is a CVE?', questions about the assistant).")
+_ROUTER_PROMPT = """\
+You route messages for an assistant that answers questions about security vulnerabilities \
+in Python packages, using a database of security advisories.
+
+Reply with JSON only, either {"route": "concept"} or {"route": "chat"}.
+
+concept: the message describes or asks about any software bug, weakness, attack or risky \
+behaviour, even without naming a package, and even if it is a statement, not a question. \
+The database search may find matching advisories.
+chat: greetings, thanks, small talk, questions about you, or a plain definition of a \
+general term (like "what is a CVE?") that needs no search.
+
+Examples:
+"an uploaded file name can write outside the upload folder" -> {"route": "concept"}
+"huge JSON input makes the server run out of memory" -> {"route": "concept"}
+"cookies are sent without the secure flag" -> {"route": "concept"}
+"what is a CVE?" -> {"route": "chat"}
+"thank you!" -> {"route": "chat"}
+
+If unsure, answer {"route": "concept"}."""
 
 
 def _normalise_id(raw: str) -> str:

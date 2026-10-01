@@ -1,0 +1,38 @@
+{"id": "id-cve-alias", "question": "What is CVE-2024-34069 about?", "route": "id", "expected": ["GHSA-2g68-c3qc-8985"]}
+{"id": "id-ghsa-lower", "question": "explain ghsa-m2qf-hxjv-5gpq", "route": "id", "expected": ["GHSA-m2qf-hxjv-5gpq"]}
+{"id": "id-pysec", "question": "Is PYSEC-2018-19 serious?", "route": "id", "expected": ["GHSA-232r-66cg-79px"]}
+{"id": "id-kev", "question": "Tell me about CVE-2025-3248", "route": "id", "expected": ["GHSA-rvqx-wpfh-mfx7"]}
+{"id": "id-unknown", "question": "What is CVE-1999-0001?", "route": "id", "expected": []}
+{"id": "pkg-werkzeug-debugger", "question": "Can someone run code through the werkzeug debugger?", "route": "package", "expected": ["GHSA-2g68-c3qc-8985"]}
+{"id": "pkg-requests-netrc", "question": "Does requests leak my netrc password to other sites?", "route": "package", "expected": ["GHSA-9hjg-9r4m-mvj7"]}
+{"id": "pkg-pyyaml-load", "question": "Is loading untrusted files with pyyaml dangerous?", "route": "package", "expected": ["GHSA-rprw-h62v-c2w7"]}
+{"id": "pkg-paramiko-terrapin", "question": "Is paramiko affected by the Terrapin SSH attack?", "route": "package", "expected": ["GHSA-45x7-px36-x8w8"]}
+{"id": "pkg-flask-vary", "question": "Can flask session cookies end up in a shared cache?", "route": "package", "expected": ["GHSA-m2qf-hxjv-5gpq"]}
+{"id": "pkg-lxml-xxe", "question": "Can lxml read local files through XML entities by default?", "route": "package", "expected": ["GHSA-vfmq-68hx-4jfw"]}
+{"id": "pkg-pillow-webp", "question": "Is there a heap overflow in pillow's WebP decoding?", "route": "package", "expected": ["GHSA-j7hp-h8jx-5ppr"]}
+{"id": "pkg-litellm-sqli", "question": "Does litellm have SQL injection when checking API keys?", "route": "package", "expected": ["GHSA-r75f-5x8p-qvmc"]}
+{"id": "c-proxy-auth-redirect", "question": "A redirect to another origin keeps the proxy login header", "route": "concept", "expected": [["GHSA-34jh-p97f-mpxf", "GHSA-966j-vmvw-g2g9", "GHSA-j8r2-6x86-q33q"]], "note": "urllib3, aiohttp and requests all had this bug; any of the three answers the question"}
+{"id": "c-gunicorn-smuggling", "question": "request smuggling in a Python WSGI server that lets attackers bypass endpoint restrictions", "route": "concept", "expected": ["GHSA-w3h3-4rj7-4ph4"]}
+{"id": "c-jinja-sandbox", "question": "escaping a template sandbox using the format method", "route": "concept", "expected": ["GHSA-q2x7-8rv6-6q7h"]}
+{"id": "c-setuptools-url", "question": "installer tool runs shell commands hidden in a package download URL", "route": "concept", "expected": ["GHSA-cx63-2mw6-8hw5"]}
+{"id": "c-sqlalchemy-groupby", "question": "SQL injection through the group by parameter of an ORM", "route": "concept", "expected": ["GHSA-38fc-9xqv-7f7q"]}
+{"id": "c-scrapy-auth-redirect", "question": "web crawler sends the Authorization header to a different domain after a redirect", "route": "concept", "expected": ["GHSA-cw9j-q3vf-hrrv"]}
+{"id": "c-urllib3-at-redos", "question": "URL parsing becomes extremely slow when the address has lots of @ signs", "route": "concept", "expected": ["GHSA-q2q7-5pp4-w6pg"]}
+{"id": "c-langflow-validate", "question": "remote code execution through a code validation endpoint that calls exec", "route": "concept", "expected": ["GHSA-g22f-v6f7-2hrh"]}
+{"id": "c-keras-deser", "question": "loading a deep learning model file can run attacker code", "route": "concept", "expected": ["GHSA-36fq-jgmw-4r9c"]}
+{"id": "c-starlette-host", "question": "a forged Host header changes the request path and bypasses path-based security checks", "route": "concept", "expected": ["GHSA-86qp-5c8j-p5mr"]}
+{"id": "c-llamaindex-image", "question": "path traversal when encoding an image in an LLM framework", "route": "concept", "expected": ["GHSA-2rhq-96q8-4vjq"]}
+{"id": "c-django-password-hashes", "question": "users without permission could see other accounts' password hashes in the admin", "route": "concept", "expected": ["GHSA-6mx3-3vqg-hpp2"]}
+{"id": "c-gitpython-env", "question": "adding a git remote with a crafted URL can leak environment variables", "route": "concept", "expected": ["GHSA-94p4-4cq8-9g67"]}
+{"id": "c-werkzeug-entropy", "question": "debugger PIN generated with too little randomness", "route": "concept", "expected": ["GHSA-gq9m-qvpx-68hc"]}
+{"id": "chat-what-cve", "question": "What is a CVE?", "route": "chat", "expected": []}
+{"id": "chat-thanks", "question": "thanks, that was helpful!", "route": "chat", "expected": []}
+{"id": "chat-hello", "question": "hello there", "route": "chat", "expected": []}
+{"id": "chat-who", "question": "what can you do for me?", "route": "chat", "expected": []}
+{"id": "h-tweepy-tls", "question": "a Twitter client library doesn't check the server's TLS certificate", "route": "concept", "expected": ["GHSA-pwx5-xg7g-wpc5"], "note": "held out: written after tuning, 2026-10-01"}
+{"id": "h-binwalk-symlink", "question": "firmware extraction tool follows symbolic links and can overwrite files", "route": "concept", "expected": ["GHSA-8m3f-g62j-3vx8"], "note": "held out: written after tuning, 2026-10-01"}
+{"id": "h-django-session-dos", "question": "Can attackers fill up django's session storage to cause an outage?", "route": "package", "expected": ["GHSA-h582-2pch-3xv3"], "note": "held out: written after tuning, 2026-10-01"}
+{"id": "h-mlflow-traversal", "question": "Is there a path traversal bug in mlflow?", "route": "package", "expected": ["GHSA-wjq3-7jxx-whj9"], "note": "held out: written after tuning, 2026-10-01"}
+{"id": "h-ecdsa-signature", "question": "signature verification in an ECDSA library accepts forged signatures", "route": "concept", "expected": ["GHSA-9wx7-jrvc-28mm"], "note": "held out: written after tuning, 2026-10-01"}
+{"id": "h-agno-sessions", "question": "one user's agent session state gets overwritten by another user's", "route": "concept", "expected": ["GHSA-vw84-hprm-cxmm"], "note": "held out: written after tuning, 2026-10-01"}
+{"id": "h-langflow-cors", "question": "Can a bad CORS setup in langflow lead to account takeover?", "route": "package", "expected": ["GHSA-577h-p2hh-v4mv"], "note": "held out: written after tuning, 2026-10-01"}

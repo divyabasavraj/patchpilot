@@ -3,6 +3,8 @@
 id route: exact lookup by ID or alias. package route: that package's advisories, ranked by
 meaning (D26). concept route: Chroma search. Duplicate records of one bug become one Doc (D24).
 """
+import math
+import re
 import sqlite3
 from collections import defaultdict
 from collections.abc import Callable, Iterable
@@ -22,6 +24,12 @@ from .models import Doc, Route
 
 EmbedFn = Callable[[list[str]], list[list[float]]]
 MAX_LISTED_VERSIONS = 12   # explicit version lists can be hundreds long
+CANDIDATES_PER_RESULT = 4   # concept route: fetch 4 x k by meaning, then re-rank down to k
+KEYWORD_WEIGHT = 0.2       # hybrid re-rank: meaning score + 0.2 x keyword score (D28)
+_STOPWORDS = frozenset("""
+    the and for are was were with that this from can does did has have how what when where which
+    who why will would could should there their they them then than into onto about any all
+    not but use used using via its it's your you yours my our is be been being""".split())
 
 
 @lru_cache(maxsize=4)
@@ -132,11 +140,45 @@ def load_docs(con: sqlite3.Connection, ids: Iterable[str]) -> list[Doc]:
     return [doc for _, doc in sorted(docs, key=lambda pair: pair[0])]
 
 
+def _terms(text: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z0-9]+", text.lower()) if len(w) >= 3 and w not in _STOPWORDS}
+
+
+def _hits(words: set[str], doc_words: set[str]) -> set[str]:
+    """Question words in the doc; words of 4+ letters also match inside longer ones (webp, libwebp)."""
+    return {w for w in words if w in doc_words or (len(w) >= 4 and any(w in dw for dw in doc_words))}
+
+
+def keyword_scores(question: str, docs: list[Doc]) -> dict[str, float]:
+    """0..1 per doc: share of the question's word weight found in the doc, rare words weighing most."""
+    words = _terms(question)
+    doc_words = {d.id: _hits(words, _terms(" ".join([d.id, *d.aliases, d.summary, d.details])))
+                 for d in docs}
+    n = len(docs)
+    idf = {}
+    for w in words:
+        df = sum(w in ws for ws in doc_words.values())
+        idf[w] = math.log(1 + (n - df + 0.5) / (df + 0.5))
+    total = sum(idf.values())
+    if not total:
+        return {d.id: 0.0 for d in docs}
+    return {d.id: sum(idf[w] for w in doc_words[d.id]) / total for d in docs}
+
+
+def _rerank(question: str, docs: list[Doc], k: int) -> list[Doc]:
+    """Hybrid order: meaning score plus a keyword bonus; unindexed docs (score None) first."""
+    kw = keyword_scores(question, docs)
+    ranked = sorted(docs, key=lambda d: (d.score is not None,
+                                         -((d.score or 0.0) + KEYWORD_WEIGHT * kw[d.id])))
+    return ranked[:k]
+
+
 def _cosine(a: np.ndarray, b: np.ndarray) -> float:
     return float(a @ b / (np.linalg.norm(a) * np.linalg.norm(b)))
 
 
-def _by_package(con, col, packages: tuple[str, ...], qvec: np.ndarray, k: int) -> list[Doc]:
+def _by_package(con, col, packages: tuple[str, ...], question: str, qvec: np.ndarray,
+                k: int) -> list[Doc]:
     where, args = _in("package", list(packages))
     ids = sorted({r[0] for r in con.execute(
         f"SELECT advisory_id FROM affected WHERE {where} "
@@ -150,20 +192,18 @@ def _by_package(con, col, packages: tuple[str, ...], qvec: np.ndarray, k: int) -
         hits = [sims[n] for n in (d.id, *d.aliases) if n in sims]
         scored.append(replace(d, score=max(hits) if hits else None))
     # Not indexed (malware, D11) first: a malicious package matters more than any bug.
-    scored.sort(key=lambda d: (d.score is not None, -(d.score or 0.0)))
-    return scored[:k]
+    return _rerank(question, scored, k)
 
 
-def _by_meaning(con, col, qvec: np.ndarray, k: int) -> list[Doc]:
-    n = min(4 * k, col.count())
+def _by_meaning(con, col, question: str, qvec: np.ndarray, k: int) -> list[Doc]:
+    n = min(CANDIDATES_PER_RESULT * k, col.count())
     if n == 0:
         return []
     hits = col.query(query_embeddings=[qvec.tolist()], n_results=n, include=["distances"])
     sims = {i: 1.0 - dist for i, dist in zip(hits["ids"][0], hits["distances"][0])}
     docs = load_docs(con, hits["ids"][0])
     scored = [replace(d, score=max(sims[x] for x in (d.id, *d.aliases) if x in sims)) for d in docs]
-    scored.sort(key=lambda d: -d.score)
-    return scored[:k]
+    return _rerank(question, scored, k)
 
 
 def retrieve(route: Route, question: str, db_dir: Path, *, k: int = 5,
@@ -176,7 +216,7 @@ def retrieve(route: Route, question: str, db_dir: Path, *, k: int = 5,
         col = _collection(str(db_dir / "chroma"))
         qvec = np.asarray(embed_fn([question])[0])
         if route.kind == "package":
-            return _by_package(con, col, route.packages, qvec, k)
+            return _by_package(con, col, route.packages, question, qvec, k)
         if route.kind == "concept":
-            return _by_meaning(con, col, qvec, k)
+            return _by_meaning(con, col, question, qvec, k)
     raise ValueError(f"Unknown route kind: {route.kind!r}")
