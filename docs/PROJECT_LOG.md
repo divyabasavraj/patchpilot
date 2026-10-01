@@ -57,6 +57,9 @@ A daily record of building this project: what I built, why I made each decision,
 | **Eval / golden set** | An exam: questions with known correct answers, used to score the system. |
 | **CI** | Automatic testing that runs every time the code changes. |
 | **Recall@k** | "Did the right document show up in the top k search results?" |
+| **Hybrid search** | Combining search by meaning (embeddings) with plain keyword matching, so a rare exact word like "WebP" still counts. |
+| **Re-ranking** | Fetch a wider set of candidates first, then sort them again with a second, more careful score, and keep the best few. |
+| **Held-out questions** | Exam questions written *after* tuning and never used to tune, to check the tuning didn't just memorise the exam. |
 | **False-block rate** | How often the guard wrongly refuses a normal, safe question. |
 
 ---
@@ -178,11 +181,71 @@ Besides the packages the exams ask about, the snapshot deliberately includes pac
 - **What:** each exam case lists its expected pins by hand, and the answer key (OSV.dev API plus raw KEV and snapshot files for the malware/KEV flags) never uses our parser or scanner. The generator fails if the parser disagrees with the hand-written pins.
 - **Why:** pins taken from our own parser meant a parser bug would also change the answer key and the exam would still pass.
 
+### D23. The router also reads `MAL-` and lower-case IDs (2026-10-01)
+- **What:** `MAL-2024-1` and `ghsa-…` (as pasted from URLs) are recognised and normalised to how they are stored.
+- **Why:** people paste IDs the way they find them; missing an ID sends the question to the wrong route.
+
+### D24. Duplicate advisories are merged in retrieval too (2026-10-01)
+- **What:** the retriever merges records that share an ID or alias into one document (main ID GHSA first, like D15). The grouping code moved from the scanner to `cve_copilot/ids.py`, shared by both.
+- **Why:** the first real search returned the same Werkzeug bug twice (GHSA and PYSEC) in the top two places, wasting one of the five slots.
+
+### D25. Package names that are everyday words need a cue (2026-10-01)
+- **What:** a short list of package names that are also English words (`keep`, `safety`, `black`, `pip`, `llm`, ...) only counts as a package if it is quoted, has a version next to it, or the word package/library/module is next to it.
+- **Why:** 8,012 package names are in the live data. "Is it safe to keep my session cookies?" must not be treated as a question about the package `keep`.
+
+### D26. The package route returns the 5 most related advisories, not all of them (2026-10-01)
+- **What:** the spec said "all advisories for that package". Now the package's advisories are ranked against the question and the top 5 are kept. Malware records come first.
+- **Why:** Django has 321 advisories in the frozen data. All of them would not fit in the AI's prompt, and most would be irrelevant to the question.
+
+### D27. Retrieval exam: hand-picked answers, paraphrased questions, held-out items (2026-10-01)
+- **What:** 38 questions (5 id, 11 package, 18 concept, 4 chat), each written in my own words after reading the advisory. The expected ID is the advisory I read, and a test checks every expected ID exists in the frozen DB. When several packages had the very same bug, any of them counts (one item). 7 questions were written after tuning and run once, untouched.
+- **Why:** copying the advisory's own wording would test word matching, not search by meaning. Held-out questions show whether tuning only memorised the exam.
+
+### D28. Hybrid re-rank: meaning score plus a keyword score (2026-10-01)
+- **What:** after fetching candidates by meaning, each is re-scored as `meaning + 0.2 × keyword score`. The keyword score weights rare words most (BM25-style IDF over the candidates), and words of 4+ letters also match inside longer ones (`webp` in `libwebp`).
+- **Why:** "heap overflow in Pillow's WebP decoding" ranked the right advisory 12th. Meaning search saw many "buffer overflow in Pillow" bugs as equally close and ignored the one rare word that decided it.
+
 ---
 
 ## 5. Daily journal
 
 *Newest entry first. One entry per work day.*
+
+### Day 7 — 2026-10-01: Phase 3 (retrieval + router)
+**What I did**
+- Wrote the Phase 3 plan (`docs/superpowers/plans/2026-10-01-phase3-retrieval-router.md`) and built it test-first: `rag/router.py` (rules first, AI only for concept vs chat), `rag/retriever.py` (id / package / concept routes, duplicates merged), a CLI, and the `retrieval` exam. Moved the duplicate-grouping code into `ids.py` so the scanner and retriever share it (scan exam still 26/26).
+- `uv run pytest -q`: **158 passed**.
+- Retrieval exam on the frozen data (`uv run python -m evals.retrieval_exam --target frozen`), with the real embedding model and Ollama `qwen2.5:7b`:
+
+| Run | What changed | recall@5 | Route accuracy |
+|---|---|---|---|
+| 1 | First version | 76.9% (20/26) | 83.9% |
+| 2 | Router prompt with examples, hybrid re-rank | 92.3% | 100% |
+| 3 | Removed a prompt example that copied an exam question; `webp` matches `libwebp`; one answer-key fix | 100% (26/26) | 100% |
+| 4 | +7 held-out questions, run once | **100% (33/33)** | **100% (38/38)** |
+
+- Same exam on the **live** data (25,164 advisories instead of 1,475): **87.9% recall@5**, 97.4% route accuracy. Misses: two real (Werkzeug "debugger PIN with too little randomness" never reached the candidates; binwalk symlink ranked 11th), two held-out questions that are ambiguous on live data (mlflow has many path-traversal bugs, all correct answers; `ecdsa` is a real package of its own, the target was `starkbank-ecdsa`). Widening the candidate pool from 20 to 50 made it worse (84.8%: Keras lost to the extra candidates), so I reverted it.
+- Demo (`uv run python -m cve_copilot.rag "Can someone run code through the werkzeug debugger?" --target frozen`):
+
+```
+Route: package (rules) packages=werkzeug
+  GHSA-2g68-c3qc-8985     7.5   0.83              Werkzeug debugger vulnerable to remote execution when interacting with
+  GHSA-hrfv-mqp8-q5rw     7.5   0.76              Werkzeug DoS: High resource usage when parsing multipart/form-data con
+  ...
+```
+
+**What I learned**
+- The small AI model was the weakest part of the router: it called five real security questions "chat" (small talk) until the prompt had examples and the rule "if unsure, search". A wrong "chat" is worse than a needless search, so junk replies also default to searching.
+- My own prompt example almost copied an exam question. That is a leak: the score goes up without the system getting better. Examples must come from outside the exam.
+- Search by meaning misses rare exact words ("WebP"); adding a keyword score (hybrid search) fixed it.
+- An exam on small data can say 100% while the full data says 88%. Both numbers belong in the log.
+
+**Open questions**
+- Live recall is 87.9%, below the 90% mark. The nightly job (Phase 7) runs on live data, so it would fail. Options: a better embedding model, a cross-encoder re-ranker, or a live-specific answer key.
+- The Chroma connection is cached per folder; after a nightly data swap a long-running app would need to reopen it (Phase 7).
+
+**Next**
+- Phase 4: grader + generator (the full answer loop) and the `answers` exam.
 
 ### Day 6 — 2026-09-30: Phase 2 finished (scanner)
 **What I did**
@@ -342,7 +405,7 @@ Skipped:
 | Metric | Target | Current | Date |
 |---|---|---|---|
 | Scanner accuracy (scan cases) | 100% | 100% (26/26 cases) | 2026-09-30 |
-| Retrieval recall@5 | ≥ 90% | not measured yet | |
+| Retrieval recall@5 | ≥ 90% | 100% frozen (33/33); 87.9% on live data | 2026-10-01 |
 | Citation accuracy | ≥ 98% | not measured yet | |
 | Groundedness | ≥ 90% | not measured yet | |
 | Attack block rate | ≥ 95% | not measured yet | |
@@ -389,6 +452,9 @@ The CI machine doesn't run the model. It calls GitHub Models' free tier. Code ch
 | 2026-09-29 | Final review: a comment like `# path C:\` swallowed the next line, so `requests==2.19.0` was never checked | A trailing backslash means "line continues", and comment lines were treated the same | Like pip, a comment line is never continued; continued parts are joined with no space. Regression test | Copy the real tool's rules (pip) instead of guessing |
 | 2026-09-29 | Final review: the exam could not catch a parser bug | Its expected pins came from our own parser | Pins are hand-written per case; generator fails if the parser disagrees; malware/KEV flags in the key come from raw OSV/KEV files. Added a litellm malware case (26 cases) | An exam whose answers come from the code under test proves nothing |
 | 2026-09-29 | Final review: output said "no fix known" or implied a "safe" upgrade when it was not | One advisory can stay unfixed, or a fix for one bug lands in another bug's range | One upgrade per package (fewest advisories still hitting it, finals first), with "still affected by: ..." listed; "no fixed version known" only when there is none | Wording in a security tool is a claim; make it true |
+| 2026-10-01 | The router sent 5 of 15 real security questions to "chat", so nothing was searched (recall 76.9%) | `qwen2.5:7b` read statements like "a redirect keeps the proxy login header" as small talk; the prompt had no examples | Prompt with examples and "if unsure, search"; unusable replies default to search. Route accuracy 83.9% → 100% | Decide which mistake is cheaper (needless search vs missed search) and make that the default |
+| 2026-10-01 | A prompt example nearly copied an exam question | I wrote examples from the failures I had just seen | Replaced every example with topics not in the exam, re-ran; still 100%. Added 7 held-out questions | Tuning on the exam can leak the answers into the system; keep held-out questions |
+| 2026-10-01 | "Heap overflow in Pillow's WebP decoding" found the right advisory only at rank 12 | Meaning search treated many "buffer overflow in Pillow" bugs as equal; the decisive word was "libwebp", not "webp" | Hybrid re-rank (meaning + 0.2 × keyword score, rare words weigh most, `webp` matches inside `libwebp`) | Embeddings blur rare names; keywords keep them |
 
 ---
 
