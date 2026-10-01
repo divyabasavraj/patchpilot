@@ -1,38 +1,18 @@
 """Match pinned requirements against the advisory database (spec 5.2). No AI here."""
-from collections import defaultdict
 from contextlib import closing
 from pathlib import Path
 
 from .db import kev_ids, load_records, open_db
 from .matching import in_range, is_affected, lowest_above, parse_version, range_notes, read_bound
 from .models import Finding, Pin, Record, ScanReport, Upgrade
+from ..ids import group_ids, main_id
 from .requirements import parse_requirements
-
-_ID_RANK = {"GHSA": 0, "PYSEC": 1}   # which ID to show first when a bug has several
 
 
 def group_records(records: list[Record]) -> list[list[Record]]:
     """Records that share any ID or alias describe the same bug (e.g. GHSA + PYSEC)."""
-    parent: dict[str, str] = {}
-
-    def find(x: str) -> str:
-        parent.setdefault(x, x)
-        while parent[x] != x:
-            parent[x] = parent[parent[x]]
-            x = parent[x]
-        return x
-
-    for rec in records:
-        for alias in rec.aliases:
-            parent[find(alias)] = find(rec.id)
-    groups: dict[str, list[Record]] = defaultdict(list)
-    for rec in records:
-        groups[find(rec.id)].append(rec)
-    return sorted(groups.values(), key=lambda g: min(r.id for r in g))
-
-
-def _main_id(ids: list[str]) -> str:
-    return min(ids, key=lambda i: (_ID_RANK.get(i.split("-")[0], 9), i))
+    by_id = {r.id: r for r in records}
+    return [[by_id[i] for i in g] for g in group_ids((r.id, r.aliases) for r in records)]
 
 
 def _fixes(records: list[Record]) -> set[str]:
@@ -51,16 +31,16 @@ def _finding(pin: Pin, group: list[Record], kev: set[str]) -> Finding | None:
     matched = [r for r in group if is_affected(v, r.ranges, r.versions)]
     if not matched:
         return None
-    main_id = _main_id([r.id for r in matched])
+    top_id = main_id([r.id for r in matched])
     all_ids = {r.id for r in group} | {a for r in group for a in r.aliases}
-    main = next(r for r in matched if r.id == main_id)
+    main = next(r for r in matched if r.id == top_id)
     scores = [r.cvss_score for r in group if r.cvss_score is not None]
     fixed = _fixes(matched)
     return Finding(
         package=pin.name,
         version=pin.version,
-        advisory_id=main_id,
-        aliases=tuple(sorted(all_ids - {main_id})),
+        advisory_id=top_id,
+        aliases=tuple(sorted(all_ids - {top_id})),
         records=tuple(sorted(r.id for r in matched)),
         summary=main.summary or next((r.summary for r in group if r.summary), ""),
         cvss_score=max(scores) if scores else None,
@@ -74,7 +54,7 @@ def _finding(pin: Pin, group: list[Record], kev: set[str]) -> Finding | None:
 
 def _affecting(v, groups: list[list[Record]]) -> tuple[str, ...]:
     """Main IDs of the advisory groups that affect version v, sorted."""
-    return tuple(sorted(_main_id(hit) for g in groups
+    return tuple(sorted(main_id(hit) for g in groups
                         if (hit := [r.id for r in g if is_affected(v, r.ranges, r.versions)])))
 
 
