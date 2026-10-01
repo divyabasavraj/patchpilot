@@ -39,3 +39,16 @@ def test_cli_missing_db(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("CVE_DATA_DIR", str(tmp_path / "data"))
     assert main(["What is CVE-2024-9999?"], embed_fn=fake_embed) == 2
     assert "Build it first" in capsys.readouterr().err
+
+
+def test_cli_answer_with_requirements(tmp_path, monkeypatch, capsys):
+    setup(tmp_path, monkeypatch)
+    req = tmp_path / "requirements.txt"
+    req.write_text("flask==2.2.0\n")
+    fake.set_responses([json.dumps({"relevant": ["GHSA-sess-1"]}), "Upgrade flask [GHSA-sess-1]."])
+    assert main(["is my flask ok?", "--requirements", str(req)], embed_fn=fake_embed) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("Upgrade flask [GHSA-sess-1].")
+    assert "Sources:\n  GHSA-sess-1" in out
+    assert "Trace: route=package (rules), retrieved=1, relevant=1, outcome=answered" in out
+    assert "- flask 2.2.0: GHSA-sess-1" in fake.calls[1]["messages"][-1]["content"]

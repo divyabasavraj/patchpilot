@@ -52,7 +52,8 @@ def scan_facts(report: ScanReport | None) -> str:
         tags = [f"CVSS {f.cvss_score:.1f}" if f.cvss_score is not None else "CVSS unknown"]
         tags += [t for t, on in (("KEV", f.in_kev), ("MALWARE", f.is_malware)) if on]
         fix = f"fixed in {f.upgrade_to}" if f.upgrade_to else "no fixed version known"
-        lines.append(f"- {f.package} {f.version}: {f.advisory_id} ({', '.join(tags)}) {fix}")
+        lines.append(f"- {f.package} {f.version}: {f.advisory_id} ({', '.join(tags)}) {fix}"
+                     + (f": {f.summary[:80]}" if f.summary else ""))
     hidden = len(report.findings) - MAX_FACT_FINDINGS
     if hidden > 0:
         lines.append(f"(and {hidden} more findings not shown)")

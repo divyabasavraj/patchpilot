@@ -46,7 +46,7 @@ def test_scan_facts_wording_and_cap():
     text = scan_facts(report)
     assert text.startswith("Scan of the user's requirements file: 1 pinned packages checked, "
                            f"{MAX_FACT_FINDINGS + 2} findings.")
-    assert "- flask 2.2.0: GHSA-kev (CVSS 5.0, KEV) fixed in 2.2.5" in text
+    assert "- flask 2.2.0: GHSA-kev (CVSS 5.0, KEV) fixed in 2.2.5: s\n" in text
     assert "- flask 2.2.0: GHSA-mal (CVSS unknown, MALWARE) no fixed version known" in text
     assert "(and 2 more findings not shown)" in text
     assert "flask 2.2.0 -> 3.1.3" in text
