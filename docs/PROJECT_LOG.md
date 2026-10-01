@@ -205,6 +205,30 @@ Besides the packages the exams ask about, the snapshot deliberately includes pac
 - **What:** after fetching candidates by meaning, each is re-scored as `meaning + 0.2 × keyword score`. The keyword score weights rare words most (BM25-style IDF over the candidates), and words of 4+ letters also match inside longer ones (`webp` in `libwebp`).
 - **Why:** "heap overflow in Pillow's WebP decoding" ranked the right advisory 12th. Meaning search saw many "buffer overflow in Pillow" bugs as equally close and ignored the one rare word that decided it.
 
+### D29. One grading call for all documents (2026-10-01)
+- **What:** the grader sends all retrieved documents (ID, summary, start of the details) in one request and gets back `{"relevant": [IDs]}`. IDs it makes up are ignored; it may name a document by its CVE alias.
+- **Why:** GitHub Models' free tier limits requests per day. Grading each of 5 documents separately would use the CI budget five times faster.
+
+### D30. Documents the user named by ID are not graded (2026-10-01)
+- **What:** on the id route the advisories go straight to the generator. An ID that is not in the database gives "I couldn't find CVE-… in the vulnerability database." without asking the AI or rewriting the query.
+- **Why:** if you ask about `CVE-2024-34069`, its advisory is relevant by definition; asking the AI could only lose it. Rewriting cannot find an ID that isn't stored.
+
+### D31. An unusable grader reply keeps every document (2026-10-01)
+- **What:** if the grader's reply is not the expected JSON, all retrieved documents are kept and the trace records `grader_error`.
+- **Why:** a formatting slip by the AI should not turn good search results into "I don't know".
+
+### D32. Scanner facts are capped at 30 findings, most urgent first (2026-10-01)
+- **What:** the prompt lists up to 30 findings (each with its summary), then "and N more findings not shown", then the suggested upgrades and lines not checked.
+- **Why:** the Day 6 demo had 62 findings; a 7B model does worse with very long prompts.
+
+### D33. The answers exam scores four things, two with pass marks (2026-10-01)
+- **What:** *citation accuracy* (cited IDs that were really among the sources, pass mark ≥ 98%), *groundedness* (an AI judge says every claim is supported, pass mark ≥ 90%), plus *answer correctness* (cites the expected advisory and every expected fix version) and *version accuracy* (version numbers in answers that appear in the sources), reported without a pass mark for now. A judge reply that is not valid JSON counts as "not grounded".
+- **Why:** citations and versions can be checked by plain code, so they are exact. Groundedness needs judgement, so it uses the AI and is the weakest measurement: the judge is the same small local model.
+
+### D34. With a scan, the most urgent findings' advisories are always sources (2026-10-01)
+- **What:** when a requirements file was scanned, the advisories behind the 5 most urgent findings are added to the sources (not graded), and each finding line in the facts carries its summary.
+- **Why:** "Which of my packages should I fix first?" retrieved one unrelated setuptools advisory, so the answer had nothing to cite. Without summaries, the model also made up "remote code execution" for Django.
+
 ---
 
 ## 5. Daily journal
