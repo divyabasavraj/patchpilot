@@ -6,11 +6,15 @@ import httpx
 from ..config import Settings
 from .retry import LLMUnavailable, with_retry
 
+# Ollama's default window (4,096 tokens) is shared by prompt and answer; a scan prompt alone
+# can reach ~3,200, and anything past the window is silently cut. 8,192 fits a 16 GB Mac.
+CONTEXT_TOKENS = 8192
+
 
 def complete(messages: list[dict], *, json_mode: bool, settings: Settings,
              client: httpx.Client | None = None, sleep=time.sleep) -> str:
     body = {"model": settings.ollama_model, "messages": messages, "stream": False,
-            "options": {"temperature": 0}}
+            "options": {"temperature": 0, "num_ctx": CONTEXT_TOKENS}}
     if json_mode:
         body["format"] = "json"
     client = client or httpx.Client(timeout=120)

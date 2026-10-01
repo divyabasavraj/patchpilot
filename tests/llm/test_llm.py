@@ -47,6 +47,7 @@ def test_ollama_request_shape():
     assert seen["url"] == "http://localhost:11434/api/chat"
     assert seen["body"]["model"] == "qwen2.5:7b"
     assert seen["body"]["options"]["temperature"] == 0
+    assert seen["body"]["options"]["num_ctx"] == 8192
     assert seen["body"]["format"] == "json"
     assert seen["body"]["stream"] is False
 

@@ -89,6 +89,8 @@ def _affected_text(con: sqlite3.Connection, ids: list[str]) -> dict[str, list[st
             f"ORDER BY rowid", args):
         listed[(adv_id, pkg)].append(version)
     for (adv_id, pkg), versions in listed.items():
+        if any(t.startswith(f"{pkg}: from ") for t in out[adv_id]):
+            continue   # ranges already say it; long version lists only add noise to the prompt
         shown = ", ".join(versions[:MAX_LISTED_VERSIONS])
         more = len(versions) - MAX_LISTED_VERSIONS
         out[adv_id].append(f"{pkg}: versions {shown}" + (f" (and {more} more)" if more > 0 else ""))
