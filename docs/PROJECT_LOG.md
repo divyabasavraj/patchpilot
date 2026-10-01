@@ -235,8 +235,8 @@ Besides the packages the exams ask about, the snapshot deliberately includes pac
 
 *Newest entry first. One entry per work day.*
 
-### Day 7 — 2026-10-01: Phase 3 (retrieval + router)
-**What I did**
+### Day 7 — 2026-10-01: Phase 3 (retrieval + router) and Phase 4 (grader + generator)
+**What I did: Phase 3**
 - Wrote the Phase 3 plan (`docs/superpowers/plans/2026-10-01-phase3-retrieval-router.md`) and built it test-first: `rag/router.py` (rules first, AI only for concept vs chat), `rag/retriever.py` (id / package / concept routes, duplicates merged), a CLI, and the `retrieval` exam. Moved the duplicate-grouping code into `ids.py` so the scanner and retriever share it (scan exam still 26/26).
 - `uv run pytest -q`: **158 passed**.
 - Retrieval exam on the frozen data (`uv run python -m evals.retrieval_exam --target frozen`), with the real embedding model and Ollama `qwen2.5:7b`:
@@ -258,18 +258,40 @@ Route: package (rules) packages=werkzeug
   ...
 ```
 
+**What I did: Phase 4**
+- Wrote the Phase 4 plan (`docs/superpowers/plans/2026-10-01-phase4-grader-generator.md`) and built the answer loop: `rag/grader.py` (one grading call, one query rewrite), `rag/generator.py` (prompt with labelled sources and scanner facts), `rag/pipeline.py` (route → retrieve → grade → retry once → generate, with a trace), `rag/citations.py` (finds cited IDs and version numbers; Phase 5's output guard will reuse it), and the `answers` exam (20 questions, fix versions copied by hand from the advisories).
+- `uv run pytest -q`: **189 passed**. Scan exam still 26/26, retrieval exam still 33/33.
+- Answers exam (`uv run python -m evals.answers_exam --target frozen`, Ollama `qwen2.5:7b`, the same model as judge):
+
+| Metric | Run 1 | Run 2 (after fixes) | Pass mark |
+|---|---|---|---|
+| Citation accuracy | 97.9% (failed) | **100%** | ≥ 98% |
+| Groundedness (AI judge) | 90% | **95%** | ≥ 90% |
+| Citation coverage (answers citing anything) | not measured | 83.3% | none yet |
+| Answer correctness | 65% | 75% | none yet |
+| Version accuracy | 93.7% | 89.4% | none yet |
+
+- Fixes between the runs: a firmer citation rule (every fact ends with the source's own ID; never cite IDs seen *inside* a source's text), no long version lists when the advisory has ranges, Ollama context raised from 4,096 to 8,192 tokens, and a new "citation coverage" number so silent answers can't hide.
+- Demo (`uv run python -m cve_copilot.rag "What is CVE-2024-34069?" --target frozen --answer`): a plain-English answer that names the fix (3.0.3) and cites `GHSA-2g68-c3qc-8985`, plus `Sources:` and a one-line trace. An off-topic question ("how do I hack my neighbour's wifi router firmware?") got "I couldn't find this in the vulnerability database." after one rewritten search.
+
 **What I learned**
 - The small AI model was the weakest part of the router: it called five real security questions "chat" (small talk) until the prompt had examples and the rule "if unsure, search". A wrong "chat" is worse than a needless search, so junk replies also default to searching.
 - My own prompt example almost copied an exam question. That is a leak: the score goes up without the system getting better. Examples must come from outside the exam.
 - Search by meaning misses rare exact words ("WebP"); adding a keyword score (hybrid search) fixed it.
 - An exam on small data can say 100% while the full data says 88%. Both numbers belong in the log.
+- "Citation accuracy" only scores answers that cite something. 6 of 20 answers cited nothing and still looked fine, so I added "citation coverage". A metric can hide a failure that a second metric shows.
+- The model works out versions the sources don't state ("affected up to 3.0.2" from "fixed in 3.0.3"). The AI judge accepts that; the code check doesn't. That is what Phase 5's output guard is for.
+- Local defaults matter: Ollama quietly cuts prompts longer than its 4,096-token window.
 
 **Open questions**
 - Live recall is 87.9%, below the 90% mark. The nightly job (Phase 7) runs on live data, so it would fail. Options: a better embedding model, a cross-encoder re-ranker, or a live-specific answer key.
 - The Chroma connection is cached per folder; after a nightly data swap a long-running app would need to reopen it (Phase 7).
 
+- The judge is the same small model that writes the answers, so groundedness is the weakest number here. In CI it will be GitHub Models' `gpt-4o-mini`.
+- 3 answers (pyyaml, lxml, Scrapy) still cite nothing, so answer correctness is 75%. Should Phase 5's output guard regenerate answers that have no citation?
+
 **Next**
-- Phase 4: grader + generator (the full answer loop) and the `answers` exam.
+- Phase 5: guards (input, context, output) and the `attacks` and `benign_tricky` exams.
 
 ### Day 6 — 2026-09-30: Phase 2 finished (scanner)
 **What I did**
@@ -430,8 +452,8 @@ Skipped:
 |---|---|---|---|
 | Scanner accuracy (scan cases) | 100% | 100% (26/26 cases) | 2026-09-30 |
 | Retrieval recall@5 | ≥ 90% | 100% frozen (33/33); 87.9% on live data | 2026-10-01 |
-| Citation accuracy | ≥ 98% | not measured yet | |
-| Groundedness | ≥ 90% | not measured yet | |
+| Citation accuracy | ≥ 98% | 100% (answers exam, 20 questions) | 2026-10-01 |
+| Groundedness | ≥ 90% | 95% (local `qwen2.5:7b` as judge) | 2026-10-01 |
 | Attack block rate | ≥ 95% | not measured yet | |
 | False-block rate | ≤ 5% | not measured yet | |
 
@@ -479,6 +501,10 @@ The CI machine doesn't run the model. It calls GitHub Models' free tier. Code ch
 | 2026-10-01 | The router sent 5 of 15 real security questions to "chat", so nothing was searched (recall 76.9%) | `qwen2.5:7b` read statements like "a redirect keeps the proxy login header" as small talk; the prompt had no examples | Prompt with examples and "if unsure, search"; unusable replies default to search. Route accuracy 83.9% → 100% | Decide which mistake is cheaper (needless search vs missed search) and make that the default |
 | 2026-10-01 | A prompt example nearly copied an exam question | I wrote examples from the failures I had just seen | Replaced every example with topics not in the exam, re-ran; still 100%. Added 7 held-out questions | Tuning on the exam can leak the answers into the system; keep held-out questions |
 | 2026-10-01 | "Heap overflow in Pillow's WebP decoding" found the right advisory only at rank 12 | Meaning search treated many "buffer overflow in Pillow" bugs as equal; the decisive word was "libwebp", not "webp" | Hybrid re-rank (meaning + 0.2 × keyword score, rare words weigh most, `webp` matches inside `libwebp`) | Embeddings blur rare names; keywords keep them |
+| 2026-10-01 | First answers exam failed citation accuracy (97.9%), and 6 of 20 answers cited nothing | The prompt said "cite IDs" too softly; the model also cited a CVE it saw inside an advisory's text | Rule: every fact ends with the source's own ID, never IDs found inside a source; added a citation-coverage metric. 100% accuracy, 83% coverage | Measure what is missing (no citations), not only what is wrong |
+| 2026-10-01 | Answers listed dozens of versions ("1.3.2, 1.3.3, … and 81 more") and some stray ones | PYSEC records store long explicit version lists next to the ranges | Show version lists only when an advisory has no range | Give the model the shortest true facts; it copies whatever it sees |
+| 2026-10-01 | "Which of my packages should I fix first?" cited nothing and made up "remote code execution" for Django | The search found one unrelated advisory; scan facts had IDs but no summaries | Advisories of the 5 most urgent findings are always sources; each finding line has its summary (D34) | If the AI must explain a fact, give it the text of that fact |
+| 2026-10-01 | Long prompts were at risk of being silently cut | Ollama's default context is 4,096 tokens, and a scan prompt is about 3,200 before the answer | `num_ctx` set to 8,192 | Check the defaults of local tools; they fail silently |
 
 ---
 
