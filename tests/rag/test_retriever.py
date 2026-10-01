@@ -42,7 +42,7 @@ def test_unknown_id_returns_nothing(db_dir):
 
 
 def test_several_ids_keep_question_order(db_dir):
-    docs = ask(Route("id", ids=("GHSA-pin-1", "CVE-2024-9")), "q", db_dir)
+    docs = ask(Route("id", ids=("GHSA-pin-1", "CVE-2024-9999")), "q", db_dir)
     assert [d.id for d in docs] == ["GHSA-pin-1", "GHSA-sql-1"]
 
 
