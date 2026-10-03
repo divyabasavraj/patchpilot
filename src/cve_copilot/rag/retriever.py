@@ -74,22 +74,32 @@ def _records_for(con: sqlite3.Connection, ids: list[str]) -> list[str]:
     return sorted(found)
 
 
+def _range_words(intro: str | None, fixed: str | None, last: str | None) -> str:
+    """Say a range in words the LLM can copy as they are: "before 3.0.3", never a version it
+    would have to work out itself, such as "up to 3.0.2" (D43)."""
+    start = "" if intro in (None, "", "0") else f"{intro} and later "
+    if fixed:
+        return f"{start or 'all '}versions before {fixed} (fixed in {fixed})"
+    if last:
+        return f"{start or 'all '}versions up to and including {last} (no fix listed)"
+    return f"{start or 'all '}versions (no fixed version)"
+
+
 def _affected_text(con: sqlite3.Connection, ids: list[str]) -> dict[str, list[str]]:
     out: dict[str, list[str]] = defaultdict(list)
     where, args = _in("advisory_id", ids)
     for adv_id, pkg, intro, fixed, last in con.execute(
             f"SELECT advisory_id, package, introduced, fixed, last_affected FROM affected "
             f"WHERE {where} ORDER BY rowid", args):
-        end = (f"fixed in {fixed}" if fixed else
-               f"last affected {last}" if last else "no fixed version")
-        out[adv_id].append(f"{pkg}: from {intro or '0'}, {end}")
+        out[adv_id].append(f"{pkg}: {_range_words(intro, fixed, last)}")
+    ranged = {(adv_id, t.split(":", 1)[0]) for adv_id, texts in out.items() for t in texts}
     listed: dict[tuple[str, str], list[str]] = defaultdict(list)
     for adv_id, pkg, version in con.execute(
             f"SELECT advisory_id, package, version FROM affected_versions WHERE {where} "
             f"ORDER BY rowid", args):
         listed[(adv_id, pkg)].append(version)
     for (adv_id, pkg), versions in listed.items():
-        if any(t.startswith(f"{pkg}: from ") for t in out[adv_id]):
+        if (adv_id, pkg) in ranged:
             continue   # ranges already say it; long version lists only add noise to the prompt
         shown = ", ".join(versions[:MAX_LISTED_VERSIONS])
         more = len(versions) - MAX_LISTED_VERSIONS

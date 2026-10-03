@@ -22,5 +22,5 @@ class Doc:
     in_kev: bool
     flagged: bool                     # injection-like text found at ingest
     flag_reason: str | None
-    affected: tuple[str, ...]         # readable ranges, e.g. "flask: from 0, fixed in 2.2.5"
+    affected: tuple[str, ...]         # readable ranges, e.g. "flask: all versions before 2.2.5 (fixed in 2.2.5)"
     score: float | None = None        # similarity to the question; None for exact lookups

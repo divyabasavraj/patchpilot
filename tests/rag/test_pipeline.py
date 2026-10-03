@@ -139,7 +139,7 @@ def test_flagged_doc_by_package_gets_facts_only(db_dir):
     a = ask("is the evil package safe?", db_dir)
     assert a.trace.outcome == "facts_only" and len(fake.calls) == 1
     assert "instructions aimed at an AI" in a.text and "[GHSA-flag-1]" in a.text
-    assert "evil: from 0, fixed in 1.0" in a.text and a.trace.graded == ()
+    assert "evil: all versions before 1.0 (fixed in 1.0)" in a.text and a.trace.graded == ()
 
 
 def test_regenerates_once_with_feedback(db_dir):
