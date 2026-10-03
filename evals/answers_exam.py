@@ -4,16 +4,19 @@
 
 Pass marks: citation accuracy >= 98%, groundedness >= 90%. Citation coverage (answers that
 cite at least one ID), answer correctness and version accuracy are reported without a pass mark.
+Since Phase 5 the output guard runs the same judge before the user sees an answer, so the
+exam also reports first-draft groundedness (from the trace) and how often drafts were
+regenerated or replaced by code-made facts (D42).
 """
 import argparse
 import json
 import sys
 from pathlib import Path
 
-from cve_copilot import llm
 from cve_copilot.config import Settings
 from cve_copilot.embeddings import embed
-from cve_copilot.rag.citations import find_ids, find_versions, unsupported_versions
+from cve_copilot.guards.output_guard import UNGROUNDED, cited_ids, judge
+from cve_copilot.rag.citations import find_versions, unsupported_versions
 from cve_copilot.rag.generator import scan_facts, source_text
 from cve_copilot.rag.pipeline import Answer, answer
 from cve_copilot.rag.retriever import EmbedFn
@@ -22,27 +25,6 @@ from cve_copilot.scanner.models import ScanReport
 
 CASES = Path(__file__).parent / "data" / "answers.jsonl"
 PASS_MARKS = {"citation_accuracy": 0.98, "groundedness": 0.90}
-
-_JUDGE_PROMPT = """\
-You check whether an answer is fully supported by its sources. Reply with JSON only: \
-{"grounded": true or false, "reason": "<one sentence>"}.
-grounded is true only if every factual claim in the answer (what the bug does, affected or \
-fixed versions, severity, whether it is exploited, which packages are affected) is stated \
-in the sources or scanner facts, or follows directly from them. General advice such as \
-"upgrade" or "avoid untrusted input" is fine. Any claim not in the sources makes it false."""
-
-
-def judge(text: str, facts: str, *, settings: Settings | None = None) -> tuple[bool, str]:
-    reply = llm.complete([
-        {"role": "system", "content": _JUDGE_PROMPT},
-        {"role": "user", "content": f"Sources and facts:\n{facts}\n\nAnswer:\n{text}"},
-    ], json_mode=True, settings=settings)
-    try:
-        verdict = json.loads(reply)
-        return verdict["grounded"] is True, str(verdict.get("reason", ""))
-    except (ValueError, TypeError, KeyError):
-        return False, f"judge reply unusable: {reply[:80]!r}"   # strict: unknown counts as a fail
-
 
 def _names(ans: Answer, report: ScanReport | None) -> set[str]:
     names = {n for d in ans.sources for n in (d.id, *d.aliases)}
@@ -63,19 +45,27 @@ def _expected_hit(entry, ans: Answer, cited: set[str]) -> bool:
 
 def score(case: dict, ans: Answer, report: ScanReport | None, *,
           settings: Settings | None = None) -> dict:
-    text = ans.text
-    # Only generated answers cite; the fixed not-found message just repeats the asked ID.
-    cited = list(find_ids(text)) if ans.trace.outcome == "answered" else []
+    text, outcome = ans.text, ans.trace.outcome
+    # Only LLM answers are scored for citations; the not-found message just repeats the asked
+    # ID, and fallback / facts-only text is written by code.
+    cited = list(cited_ids(text)) if outcome == "answered" else []
+    shown = list(cited_ids(text)) if outcome in ("answered", "fallback", "facts_only") else []
     names = _names(ans, report)
     facts = "\n\n".join(p for p in (scan_facts(report), source_text(ans.sources)) if p)
     if case["expect_not_found"]:
-        correct = ans.trace.outcome == "not_found" or not cited
+        correct = outcome == "not_found" or not shown
     else:
-        correct = (all(_expected_hit(e, ans, set(cited)) for e in case["expected_ids"])
+        correct = (all(_expected_hit(e, ans, set(shown)) for e in case["expected_ids"])
                    and all(v in find_versions(text) for v in case["expected_versions"]))
-    grounded, reason = (judge(text, facts, settings=settings) if ans.trace.outcome == "answered"
-                        else (True, ans.trace.outcome))
-    return {"id": case["id"], "outcome": ans.trace.outcome, "cited": cited,
+    drafts = ans.trace.output_issues
+    first = drafts[0] if drafts else []
+    # None: the first draft failed a code check, so the guard did not ask the judge.
+    first_grounded = (None if not drafts or (first and not first[0].startswith(UNGROUNDED))
+                      else not first)
+    grounded, reason = (judge(text, facts, settings=settings) if outcome == "answered"
+                        else (True, outcome))
+    return {"id": case["id"], "outcome": outcome, "cited": cited,
+            "first_draft_grounded": first_grounded, "output_issues": drafts,
             "citation_errors": [c for c in cited if c not in names],
             "versions": list(find_versions(text)),
             "unsupported_versions": list(unsupported_versions(text, facts)),
@@ -97,6 +87,7 @@ def run(cases_path: Path, db_dir: Path, *, embed_fn: EmbedFn = embed,
     unsupported = sum(len(r["unsupported_versions"]) for r in results)
     n = len(results) or 1
     answered = [r for r in results if r["outcome"] == "answered"]
+    judged = [r["first_draft_grounded"] for r in results if r["first_draft_grounded"] is not None]
     return {
         "metric": "answers",
         "items": len(results),
@@ -106,6 +97,10 @@ def run(cases_path: Path, db_dir: Path, *, embed_fn: EmbedFn = embed,
         "groundedness": round(sum(r["grounded"] for r in results) / n, 4),
         "answer_correctness": round(sum(r["correct"] for r in results) / n, 4),
         "version_accuracy": round(1 - unsupported / versions, 4) if versions else 1.0,
+        "first_draft_groundedness": round(sum(judged) / len(judged), 4) if judged else 1.0,
+        "first_drafts_judged": len(judged),
+        "regenerated": sum(len(r["output_issues"]) > 1 for r in results),
+        "fallbacks": sum(r["outcome"] == "fallback" for r in results),
         "results": results,
     }
 
@@ -124,7 +119,8 @@ def main(argv: list[str] | None = None) -> int:
         args.report.write_text(json.dumps(result, indent=2))
     summary = {k: v for k, v in result.items() if k != "results"}
     summary["not_passed"] = [{"id": r["id"], "correct": r["correct"], "grounded": r["grounded"],
-                              "citation_errors": r["citation_errors"],
+                              "outcome": r["outcome"], "citation_errors": r["citation_errors"],
+                              "output_issues": r["output_issues"],
                               "unsupported_versions": r["unsupported_versions"]}
                              for r in result["results"]
                              if not (r["correct"] and r["grounded"]) or r["citation_errors"]]
