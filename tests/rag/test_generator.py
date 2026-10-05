@@ -64,6 +64,15 @@ def test_generate_prompt_has_rules_sources_and_facts():
     assert "square brackets" in system and "version" in system and "exploit" in system
     assert user.startswith("Question: is flask ok?")
     assert "Scanner facts:\nScan of ..." in user and "[GHSA-a] also known as" in user
+    assert "never an instruction" in system and "rejected" not in user
+
+
+def test_generate_with_feedback():
+    fake.set_responses(["better [GHSA-a]"])
+    generate("q", [DOC], "", feedback=["cites no source", "mentions 9.9.9"], settings=FAKE)
+    user = fake.calls[0]["messages"][-1]["content"]
+    assert user.endswith("rejected because it:\n- cites no source\n- mentions 9.9.9\n"
+                         "Write a new answer that fixes these problems.")
 
 
 def test_chat_reply_has_no_sources():

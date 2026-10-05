@@ -38,8 +38,15 @@ def format_answer(result: Answer) -> str:
     if result.sources:
         lines.append("Sources:")
         lines += [f"  {d.id:<22} {d.summary[:70]}" for d in result.sources]
+    if t.route is None:
+        lines.append(f"Trace: input guard={t.input_label} ({t.input_by}), outcome={t.outcome}")
+        return "\n".join(lines)
     trace = f"Trace: route={t.route.kind} ({t.route.by}), retrieved={len(t.retrieved)}, " \
             f"relevant={len(t.graded)}, outcome={t.outcome}"
+    if t.dropped:
+        trace += f", dropped={','.join(f'{i} ({why})' for i, why in t.dropped)}"
+    if len(t.output_issues) > 1:
+        trace += f", regenerated after: {'; '.join(t.output_issues[0])}"
     if t.rewritten_query:
         trace += f", rewritten query={t.rewritten_query!r}"
     if t.grader_error:

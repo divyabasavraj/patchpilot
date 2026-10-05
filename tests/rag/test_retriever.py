@@ -21,7 +21,7 @@ def ask(route, question, db_dir, k=5):
 def test_id_lookup_by_main_id(db_dir):
     [doc] = ask(Route("id", ids=("GHSA-pin-1",)), "q", db_dir)
     assert (doc.id, doc.packages, doc.cvss_score, doc.score) == ("GHSA-pin-1", ("werkzeug",), 7.0, None)
-    assert doc.affected == ("werkzeug: from 0, fixed in 0.15.3",)
+    assert doc.affected == ("werkzeug: all versions before 0.15.3 (fixed in 0.15.3)",)
 
 
 def test_cve_alias_lookup_merges_duplicates(db_dir):
@@ -29,7 +29,7 @@ def test_cve_alias_lookup_merges_duplicates(db_dir):
     assert doc.id == "GHSA-sess-1"
     assert doc.aliases == ("CVE-2023-1", "PYSEC-2023-1")
     assert doc.summary == "Session cookie leaks into a shared cache"
-    assert doc.affected == ("flask: from 0, fixed in 2.2.5",)
+    assert doc.affected == ("flask: all versions before 2.2.5 (fixed in 2.2.5)",)
 
 
 def test_lookup_by_the_duplicate_gives_the_same_doc(db_dir):
@@ -55,7 +55,7 @@ def test_flag_and_affected_text_variants(db_dir):
     with closing(open_db(db_dir / "cve.db")) as con:
         flag, old, git = load_docs(con, ["GHSA-flag-1", "GHSA-old-1", "GHSA-git-1"])
     assert (flag.flagged, flag.flag_reason) == (True, "ignore-instructions")
-    assert old.affected == ("oldlib: from 1.0, last affected 1.4",)
+    assert old.affected == ("oldlib: 1.0 and later versions up to and including 1.4 (no fix listed)",)
     assert git.affected == ("gitlib: versions 0.9, 1.0",)
 
 
@@ -121,4 +121,12 @@ def test_version_list_hidden_when_a_range_exists(tmp_path):
     write_db(tmp_path / "cve.db", [adv], [])
     with closing(open_db(tmp_path / "cve.db")) as con:
         [doc] = load_docs(con, ["PYSEC-x"])
-    assert doc.affected == ("lib: from 0, fixed in 2.0", "other: versions 0.1")
+    assert doc.affected == ("lib: all versions before 2.0 (fixed in 2.0)", "other: versions 0.1")
+
+
+def test_range_words_never_need_working_out():
+    from cve_copilot.rag.retriever import _range_words
+    assert _range_words("0", "3.0.3", None) == "all versions before 3.0.3 (fixed in 3.0.3)"
+    assert _range_words("2.0", "2.2.5", None) == "2.0 and later versions before 2.2.5 (fixed in 2.2.5)"
+    assert _range_words("1.0", None, None) == "1.0 and later versions (no fixed version)"
+    assert _range_words(None, None, None) == "all versions (no fixed version)"

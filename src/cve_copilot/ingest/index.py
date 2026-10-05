@@ -27,18 +27,22 @@ def build_index(chroma_dir: Path, advisories: list[Advisory], embed_fn: EmbedFn,
     client = chromadb.PersistentClient(path=str(chroma_dir))
     try:
         col = client.create_collection(COLLECTION, metadata={"hnsw:space": "cosine"})
-        for start in range(0, len(advisories), batch_size):
-            batch = advisories[start:start + batch_size]
-            texts = [doc_text(a) for a in batch]
-            col.add(
-                ids=[a.id for a in batch],
-                documents=texts,
-                embeddings=embed_fn(texts),
-                metadatas=[{"id": a.id, "packages": ",".join(a.packages), "flagged": int(a.flagged)}
-                           for a in batch],
-            )
+        add_docs(col, advisories, embed_fn, batch_size)
     finally:
         # Chroma caches one client per folder path. The build folder is renamed and later
         # reused, so drop the cache, or the next build sees a stale "collection exists".
         client.clear_system_cache()
     return len(advisories)
+
+
+def add_docs(col, advisories: list[Advisory], embed_fn: EmbedFn, batch_size: int = 256) -> None:
+    for start in range(0, len(advisories), batch_size):
+        batch = advisories[start:start + batch_size]
+        texts = [doc_text(a) for a in batch]
+        col.add(
+            ids=[a.id for a in batch],
+            documents=texts,
+            embeddings=embed_fn(texts),
+            metadatas=[{"id": a.id, "packages": ",".join(a.packages), "flagged": int(a.flagged)}
+                       for a in batch],
+        )
