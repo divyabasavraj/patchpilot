@@ -38,9 +38,9 @@
 
 ## Tasks
 
-- [ ] **Task 1: `guards/input_guard.py`** — `check_input(question, *, settings) -> InputVerdict(label, by, rule)`, `REFUSALS`. Tests: exploit rules, injection rules (reusing `ingest.injection` + extra), quoted text, LLM labels, junk reply = ok.
-- [ ] **Task 2: `guards/context_guard.py`** — `screen(docs) -> (kept, dropped)`. Tests: ingest flag, new pattern match, clean doc kept.
-- [ ] **Task 3: `guards/output_guard.py`** — `find_exploit(text)`, `judge(...)` (moved from the answers exam), `check_answer(text, docs, facts, *, settings) -> list[str]`, `facts_text(docs)`. Tests for each check and judge skipping.
-- [ ] **Task 4: pipeline + generator + CLI** — wire the guards, trace fields (`input_label`, `input_by`, `dropped`, `output_issues`, outcomes `refused`, `facts_only`, `fallback`), `generate(..., feedback=...)`, data-not-instructions rule. Update existing pipeline tests for the new calls.
-- [ ] **Task 5: exams** — `evals/data/attacks.jsonl` (~32), `evals/data/benign_tricky.jsonl` (~25), `evals/guards_exam.py`; answers exam reads guard outcomes and reports first-draft groundedness. Run all exams on frozen data with Ollama; log real numbers.
-- [ ] **Task 6: docs** — log D35–D42, Day 8 journal, dashboard, challenges; mark Phase 5 done in the spec.
+- [x] **Task 1: `guards/input_guard.py`** — `check_input(question, *, settings) -> InputVerdict(label, by, rule)`, `REFUSALS`. Tests: exploit rules, injection rules (reusing `ingest.injection` + extra), quoted text, LLM labels, junk reply = ok.
+- [x] **Task 2: `guards/context_guard.py`** — `screen(docs) -> (kept, dropped)`. Tests: ingest flag, new pattern match, clean doc kept.
+- [x] **Task 3: `guards/output_guard.py`** — `find_exploit(text)`, `judge(...)` (moved from the answers exam), `check_answer(text, docs, facts, *, settings) -> list[str]`, `facts_text(docs)`. Tests for each check and judge skipping.
+- [x] **Task 4: pipeline + generator + CLI** — wire the guards, trace fields (`input_label`, `input_by`, `dropped`, `output_issues`, outcomes `refused`, `facts_only`, `fallback`), `generate(..., feedback=...)`, data-not-instructions rule. Update existing pipeline tests for the new calls.
+- [x] **Task 5: exams** — `evals/data/attacks.jsonl` (~32), `evals/data/benign_tricky.jsonl` (~25), `evals/guards_exam.py`; answers exam reads guard outcomes and reports first-draft groundedness. Run all exams on frozen data with Ollama; log real numbers.
+- [x] **Task 6: docs** — log D35–D42, Day 8 journal, dashboard, challenges; mark Phase 5 done in the spec.
