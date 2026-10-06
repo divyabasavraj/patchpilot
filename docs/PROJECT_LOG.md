@@ -265,11 +265,41 @@ Besides the packages the exams ask about, the snapshot deliberately includes pac
 - **What:** the retriever says a range as "before 3.0.3 (fixed in 3.0.3)", never a version the model would have to work out itself such as "up to 3.0.2".
 - **Why:** the model kept writing "affected up to 3.0.2", a version that appears in no source, which the output guard's version check then rejected. Giving it only copy-ready wording removed the problem at the source.
 
+### D44. PR CI: cheap checks on every push, AI exams on a fixed sample only on request (2026-10-06)
+- **What:** every push runs the unit tests, a fresh build of the frozen DB and the scan exam (no AI). The retrieval exam and a fixed, committed sample of the answers and guards exams run only when a PR gets the `ai-exams` label or the workflow is started by hand. The full exams keep running locally.
+- **Why:** one full exam run needs about 400 AI calls; no free option can afford that on every push. Cheap, exact checks belong on every push; slow AI checks are worth running on a sample when they matter.
+
+### D45. CI runs the AI with Ollama on the GitHub runner, not a hosted API (2026-10-06)
+- **What:** the `ai-exams` job installs Ollama on a free public-repo runner and uses the same `qwen2.5:7b` as locally (model cached between runs). `LLM=github` is removed. The first plan task times it; `qwen2.5:3b` is the fallback if 7B is too slow.
+- **Why:** GitHub Models, the spec's CI plan, was retired on 2026-07-30. Other free APIs need a secret key and can change their limits overnight. Running the model ourselves is free, has no quota, and makes CI scores directly comparable with local ones.
+
+### D46. The repo is public on GitHub (2026-10-06)
+- **What:** the project goes to a public repo under `divyabasavraj`.
+- **Why:** it is a portfolio piece, and public repos get unlimited free Actions minutes. Nothing secret is in the repo.
+
 ---
 
 ## 5. Daily journal
 
 *Newest entry first. One entry per work day.*
+
+### Day 9 — 2026-10-06: Phase 6 design started (CI)
+
+**What I did**
+- Merged `phase5-guards` into `main` (done 2026-10-05, commit `68a1745`).
+- Started designing Phase 6. Re-read the spec: Phase 6 is **evals runner + PR CI** (`run.py`, pass marks, `pr.yml`); the Streamlit app and nightly job are Phase 7.
+- Counted AI calls: about 4–6 per question, so a full exam run is about 400 calls.
+- Checked GitHub Models before relying on it, and found it **retired on 2026-07-30**: every request now gets a plain-text "OK". Decided D44–D46 (sampled AI exams on request, Ollama on the CI runner, public repo).
+- Agreed the shape of `pr.yml`: job `checks` on every push (pytest, frozen DB build, scan exam) and job `ai-exams` on label or by hand (Ollama + `qwen2.5:7b`, retrieval exam plus a fixed sample of answers/guards, report in the job summary, exit 0 pass / 1 score fail / 2 infrastructure error).
+
+**What I learned**
+- Verify an outside service is still alive before designing around it. A spec written ten days ago already pointed at a dead API.
+- A "200 OK" doesn't prove a service works; the body was not a chat reply at all.
+
+**Open questions / next**
+- Waiting on approval of design part 1 (the two CI jobs); then part 2: `evals/run.py`, the pass-marks file, and how the sample is picked.
+- Then: write the Phase 6 spec section, the plan, create the public GitHub repo, and time Ollama on a runner first.
+- Tidy-ups: delete the merged `phase5-guards` branch; a tracked 0-byte `data/frozen/cve.db` looks stray.
 
 ### Day 8 — 2026-10-03 to 2026-10-05: Phase 5 (guards)
 
@@ -516,9 +546,9 @@ Skipped:
 | Scanner accuracy (scan cases) | 100% | 100% (26/26 cases) | 2026-09-30 |
 | Retrieval recall@5 | ≥ 90% | 100% frozen (33/33); 87.9% on live data | 2026-10-01 |
 | Citation accuracy | ≥ 98% | 100% (answers exam, 20 questions) | 2026-10-01 |
-| Groundedness | ≥ 90% | 95% (local `qwen2.5:7b` as judge) | 2026-10-01 |
-| Attack block rate | ≥ 95% | not measured yet | |
-| False-block rate | ≤ 5% | not measured yet | |
+| Groundedness | ≥ 90% | 100% (local `qwen2.5:7b` as judge) | 2026-10-05 |
+| Attack block rate | ≥ 95% | 100% frozen (32 attacks) | 2026-10-05 |
+| False-block rate | ≤ 5% | 0% frozen (27 benign questions) | 2026-10-05 |
 
 ---
 
@@ -568,6 +598,7 @@ The CI machine doesn't run the model. It calls GitHub Models' free tier. Code ch
 | 2026-10-01 | Answers listed dozens of versions ("1.3.2, 1.3.3, … and 81 more") and some stray ones | PYSEC records store long explicit version lists next to the ranges | Show version lists only when an advisory has no range | Give the model the shortest true facts; it copies whatever it sees |
 | 2026-10-01 | "Which of my packages should I fix first?" cited nothing and made up "remote code execution" for Django | The search found one unrelated advisory; scan facts had IDs but no summaries | Advisories of the 5 most urgent findings are always sources; each finding line has its summary (D34) | If the AI must explain a fact, give it the text of that fact |
 | 2026-10-01 | Long prompts were at risk of being silently cut | Ollama's default context is 4,096 tokens, and a scan prompt is about 3,200 before the answer | `num_ctx` set to 8,192 | Check the defaults of local tools; they fail silently |
+| 2026-10-06 | The CI plan relied on GitHub Models, which no longer works | GitHub retired GitHub Models on 2026-07-30; the API now answers every request with a plain-text "OK" | Found by checking the docs and calling the API before designing CI; switched to Ollama on the CI runner (D45) | Check that outside services still exist before building on them; a 200 status is not proof |
 
 ---
 
