@@ -1,0 +1,16 @@
+# Pass marks for every exam (D47). A key ending in _max is an upper limit;
+# every other key is a lower limit. Read by evals/thresholds.py.
+
+[scan]
+accuracy = 1.00
+
+[retrieval]
+recall_at_5 = 0.90
+
+[answers]
+citation_accuracy = 0.98
+groundedness = 0.90
+
+[guards]
+block_rate = 0.95
+false_block_rate_max = 0.05

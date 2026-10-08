@@ -15,9 +15,9 @@ from cve_copilot.config import Settings
 from cve_copilot.embeddings import embed
 from cve_copilot.rag import search
 from cve_copilot.rag.retriever import EmbedFn
+from evals import thresholds
 
 CASES = Path(__file__).parent / "data" / "retrieval.jsonl"
-PASS_MARK = 0.90
 
 
 def _score(case: dict, route, docs) -> dict:
@@ -59,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     result = run(CASES, Settings.from_env().db_dir(args.target))
     print(json.dumps({key: val for key, val in result.items() if key != "results"}, indent=2))
-    return 0 if result["recall_at_5"] >= PASS_MARK else 1
+    return 1 if thresholds.check("retrieval", result) else 0
 
 
 if __name__ == "__main__":

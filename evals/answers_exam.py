@@ -2,7 +2,7 @@
 
     uv run python -m evals.answers_exam [--target frozen|live]
 
-Pass marks: citation accuracy >= 98%, groundedness >= 90%. Citation coverage (answers that
+Pass marks: evals/thresholds.toml (citation accuracy, groundedness). Citation coverage (answers that
 cite at least one ID), answer correctness and version accuracy are reported without a pass mark.
 Since Phase 5 the output guard runs the same judge before the user sees an answer, so the
 exam also reports first-draft groundedness (from the trace) and how often drafts were
@@ -22,9 +22,9 @@ from cve_copilot.rag.pipeline import Answer, answer
 from cve_copilot.rag.retriever import EmbedFn
 from cve_copilot.scanner import scan
 from cve_copilot.scanner.models import ScanReport
+from evals import thresholds
 
 CASES = Path(__file__).parent / "data" / "answers.jsonl"
-PASS_MARKS = {"citation_accuracy": 0.98, "groundedness": 0.90}
 
 def _names(ans: Answer, report: ScanReport | None) -> set[str]:
     names = {n for d in ans.sources for n in (d.id, *d.aliases)}
@@ -106,7 +106,7 @@ def run(cases_path: Path, db_dir: Path, *, embed_fn: EmbedFn = embed,
 
 
 def passes(result: dict) -> bool:
-    return all(result[metric] >= mark for metric, mark in PASS_MARKS.items())
+    return not thresholds.check("answers", result)
 
 
 def main(argv: list[str] | None = None) -> int:

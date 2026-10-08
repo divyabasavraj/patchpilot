@@ -10,6 +10,7 @@ from pathlib import Path
 from cve_copilot.config import Settings
 from cve_copilot.scanner import scan
 from cve_copilot.scanner.models import ScanReport
+from evals import thresholds
 
 CASES = Path(__file__).parent / "data" / "scan_cases.jsonl"
 
@@ -60,7 +61,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     result = run(CASES, Settings.from_env().db_dir(args.target) / "cve.db")
     print(json.dumps(result, indent=2))
-    return 0 if result["accuracy"] == 1.0 else 1
+    return 1 if thresholds.check("scan", result) else 0
 
 
 if __name__ == "__main__":
