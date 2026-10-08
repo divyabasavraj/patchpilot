@@ -277,11 +277,32 @@ Besides the packages the exams ask about, the snapshot deliberately includes pac
 - **What:** the project goes to a public repo under `divyabasavraj`.
 - **Why:** it is a portfolio piece, and public repos get unlimited free Actions minutes. Nothing secret is in the repo.
 
+### D47. One pass-marks file and a fixed CI sample (2026-10-08)
+- **What:** all pass marks move out of the exam files into `evals/thresholds.toml` (read with Python's built-in `tomllib`). A key ending in `_max` is an upper limit. CI's AI exams use a hand-picked list of IDs committed in `evals/data/ci_sample.toml` (8 answers, 10 attacks with at least 2 of each kind, 8 benign) and the same pass marks as the full exams. `evals/run.py` runs any set of exams and exits 0 (pass), 1 (a score missed its mark) or 2 (something broke).
+- **Why:** with one file, the numbers can't drift apart between exams and CI. A fixed sample means every CI run sits the same test, so scores can be compared. TOML needs no extra library. Keeping the same marks on the sample is strict (one miss fails), but the full run is at 100%, so any miss deserves a look.
+
 ---
 
 ## 5. Daily journal
 
 *Newest entry first. One entry per work day.*
+
+### Day 10 — 2026-10-08: Phase 6 design approved, spec written
+
+**What I did**
+- Approved the Phase 6 design. Part 1: two CI jobs, `checks` on every push and `ai-exams` on a label or by hand. Part 2: `evals/run.py`, the pass-marks file and the CI sample.
+- Logged D47: pass marks go in one `evals/thresholds.toml`, and CI uses a fixed sample listed in `evals/data/ci_sample.toml`.
+- Wrote the Phase 6 spec (`docs/superpowers/specs/2026-10-08-phase6-evals-ci-design.md`) and pointed the main spec's CI section to it.
+
+**What I learned**
+- Each exam had its own copy of its pass mark in code. Putting them in one file means a mark can't be changed in one place and forgotten in another.
+- Separate exit codes for "score too low" (1) and "machine broke" (2) tell you straight away whether to fix the code or fix CI.
+- A small sample with the same pass marks is strict: 9/10 attacks blocked is 90%, under the 95% mark.
+
+**Open questions / next**
+- Review the spec, then write the Phase 6 plan.
+- First plan task: create the public repo and time Ollama + `qwen2.5:7b` on a GitHub runner (fall back to `3b` if too slow).
+- Tidy-ups still open: delete the `phase5-guards` branch; the 0-byte tracked `data/frozen/cve.db`.
 
 ### Day 9 — 2026-10-06: Phase 6 design started (CI)
 
