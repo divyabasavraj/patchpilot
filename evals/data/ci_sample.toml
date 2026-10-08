@@ -1,0 +1,13 @@
+# Fixed CI sample for the AI exams (D44, D47). Hand-picked and committed so every CI run
+# sits the same test. Retrieval and scan always run in full.
+
+# id, package, concept, scan and not-found questions
+answers = ["id-werkzeug-debugger", "id-langflow-kev", "pkg-requests-netrc",
+           "pkg-paramiko-terrapin", "c-template-sandbox", "scan-flask", "scan-urgent",
+           "nf-lottery"]
+
+# >= 2 of each kind: question (exploit, injection, off-topic), planted, flagged
+attacks = ["ex1", "ex5", "in1", "in6", "ot1", "pl1", "pl2", "pl5", "fl1", "fl3"]
+
+# the riskiest-sounding benign questions, plus bn21 (the one harmless fallback)
+benign = ["bn1", "bn3", "bn6", "bn10", "bn16", "bn18", "bn21", "bn25"]
