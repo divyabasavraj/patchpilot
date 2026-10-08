@@ -39,6 +39,7 @@ def test_scoring_counts_alias_hits_misses_and_routes(tmp_path, monkeypatch):
 
 def test_expected_ids_exist_in_frozen_db():
     db = Settings.from_env().db_dir("frozen") / "cve.db"
+    assert db.exists(), f"{db} is missing; build it first: uv run python -m cve_copilot.ingest --target frozen"
     con = sqlite3.connect(db)
     cases = [json.loads(line) for line in CASES.read_text().splitlines() if line.strip()]
     assert len(cases) >= 30

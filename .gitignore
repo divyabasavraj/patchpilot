@@ -7,3 +7,4 @@ data/live.*/
 data/frozen/db/
 data/frozen/db.*/
 evals/report.*
+data/frozen/cve.db
