@@ -142,6 +142,19 @@ def test_bad_sample_stops_before_any_exam(tmp_path, monkeypatch):
     assert "zz" in (tmp_path / "report.md").read_text()
 
 
+@pytest.mark.parametrize("text", ['answers = 5\nattacks = []\nbenign = []\n',
+                                  'answers = [1]\nattacks = []\nbenign = []\n'])
+def test_malformed_sample_values_are_exit_2(tmp_path, monkeypatch, text):
+    files = {name: write_jsonl(tmp_path / f"{name}.jsonl", ["x"])
+             for name in ("answers", "attacks", "benign")}
+    sample = tmp_path / "s.toml"
+    sample.write_text(text)
+    real_load_sample = load_sample
+    monkeypatch.setattr(runner_mod, "load_sample", lambda: real_load_sample(sample, files))
+    monkeypatch.setattr(runner_mod, "run", lambda *a, **kw: pytest.fail("no exam may run"))
+    assert main(["--sample", "--out", str(tmp_path)]) == 2
+
+
 @pytest.mark.parametrize("value", [None, ""])
 def test_step_summary_written_only_when_set(tmp_path, monkeypatch, value):
     monkeypatch.setattr(runner_mod, "run",

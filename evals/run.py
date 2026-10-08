@@ -47,6 +47,8 @@ def load_sample(path: Path = SAMPLE, files: dict[str, Path] = SAMPLE_FILES) -> d
     if set(sample) != set(files):
         raise SampleError(f"{path.name} must list exactly: {', '.join(sorted(files))}")
     for name, ids in sample.items():
+        if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+            raise SampleError(f"{path.name}: {name} must be a list of ID strings")
         unknown = sorted(set(ids) - set(_ids(files[name])))
         if unknown:
             raise SampleError(f"{path.name}: {name} has IDs not in {files[name].name}: "
