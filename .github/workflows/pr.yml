@@ -1,0 +1,95 @@
+name: PR checks
+
+on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/fastembed
+          key: fastembed-bge-small-en-v1.5
+      - run: uv sync
+      # Before pytest: one test checks the exam IDs exist in the frozen DB.
+      - name: Build the frozen DB
+        run: uv run python -m cve_copilot.ingest --target frozen
+      - name: Unit tests
+        run: uv run pytest -q
+      - name: Scan exam
+        run: uv run python -m evals.run --exams scan
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-checks
+          path: |
+            evals/report.json
+            evals/report.md
+          if-no-files-found: ignore
+
+  ai-exams:
+    needs: checks
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       contains(github.event.pull_request.labels.*.name, 'ai-exams'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 120           # D48: cap until the first measured run sets it
+    env:
+      LLM: ollama
+      OLLAMA_MODEL: qwen2.5:7b     # D48: model chosen by the timing run
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/fastembed
+          key: fastembed-bge-small-en-v1.5
+      - uses: actions/cache@v4
+        with:
+          path: /home/runner/ollama-models
+          key: ollama-${{ env.OLLAMA_MODEL }}
+      - run: uv sync
+      - name: Build the frozen DB
+        run: uv run python -m cve_copilot.ingest --target frozen
+      - name: Install and start Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          sudo systemctl stop ollama || true
+          mkdir -p /home/runner/ollama-models
+          OLLAMA_MODELS=/home/runner/ollama-models nohup ollama serve > /home/runner/ollama.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://localhost:11434/api/tags >/dev/null && break; sleep 1; done
+          curl -sf http://localhost:11434/api/tags >/dev/null || { cat /home/runner/ollama.log; exit 1; }
+      - name: Pull model (cached after the first run)
+        run: ollama pull "$OLLAMA_MODEL"
+      - name: Retrieval exam + sampled answers and guards exams
+        run: uv run python -m evals.run --exams retrieval,answers,guards --sample
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-ai-exams
+          path: |
+            evals/report.json
+            evals/report.md
+          if-no-files-found: ignore
