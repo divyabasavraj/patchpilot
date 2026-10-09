@@ -1,6 +1,6 @@
 # Phase 6: Evals Runner + PR CI Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** One command (`python -m evals.run`) runs any set of exams against pass marks kept in one file, and a GitHub Actions workflow runs the cheap checks on every push and a fixed sample of the AI exams on request.
 
@@ -48,7 +48,7 @@
 - Consumes: nothing.
 - Produces: the public repo `divyabasavraj/cve-copilot` with `main` pushed; branch `phase6-ci`; the measured numbers that set `OLLAMA_MODEL`, `timeout-minutes` and the sample size used in Tasks 4–5 (written into the log in Task 6 as D48).
 
-- [ ] **Step 1: Tidy-ups**
+- [x] **Step 1: Tidy-ups**
 
 ```bash
 cd /Users/divyabasavraj/Desktop/RAG/cve-copilot
@@ -56,7 +56,7 @@ git branch -d phase5-guards          # merged into main on 2026-10-05
 git rm data/frozen/cve.db            # 0 bytes; the real DB lives in data/frozen/db/ (ignored)
 ```
 
-- [ ] **Step 2: Stop the frozen-DB test from creating empty files**
+- [x] **Step 2: Stop the frozen-DB test from creating empty files**
 
 `sqlite3.connect()` silently creates a missing file; that is how the stray `cve.db` appeared. In `tests/evals/test_retrieval_exam.py`, change the start of `test_expected_ids_exist_in_frozen_db` to:
 
@@ -70,7 +70,7 @@ def test_expected_ids_exist_in_frozen_db():
 Run: `uv run pytest -q`
 Expected: all tests pass (build the frozen DB first with `uv run python -m cve_copilot.ingest --target frozen` if the new assert fires).
 
-- [ ] **Step 3: Check nothing secret is in the repo**
+- [x] **Step 3: Check nothing secret is in the repo**
 
 ```bash
 git grep -nE 'ghp_[A-Za-z0-9]{20,}|github_pat_|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN .*PRIVATE KEY' -- ':!data/frozen/raw' || echo "no secrets found"
@@ -78,7 +78,7 @@ git status --short
 ```
 Expected: `no secrets found`, clean tree apart from Step 1–2 changes.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add -A tests/evals/test_retrieval_exam.py data/frozen/cve.db
@@ -87,7 +87,7 @@ git commit -m "chore: drop stray empty frozen cve.db; frozen-DB test checks the 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 5: Create the public repo and push `main` (ASK THE USER FIRST)**
+- [x] **Step 5: Create the public repo and push `main` (ASK THE USER FIRST)**
 
 Show the user the command and wait for an explicit yes:
 ```bash
@@ -96,7 +96,7 @@ gh repo create divyabasavraj/cve-copilot --public --source . --remote origin --p
 ```
 Then: `git switch -c phase6-ci && git push -u origin phase6-ci`
 
-- [ ] **Step 6: Write the throwaway timing workflow on its own branch**
+- [x] **Step 6: Write the throwaway timing workflow on its own branch**
 
 ```bash
 git switch -c timing-test main
@@ -150,7 +150,7 @@ jobs:
           sed 's/^/    /' "$RUNNER_TEMP/times.txt" >> "$GITHUB_STEP_SUMMARY"
 ```
 
-- [ ] **Step 7: Push the branch (ASK THE USER FIRST), watch, read the times**
+- [x] **Step 7: Push the branch (ASK THE USER FIRST), watch, read the times**
 
 ```bash
 git add .github/workflows/timing.yml
@@ -165,7 +165,7 @@ gh run view "$(gh run list --branch timing-test --limit 1 --json databaseId -q '
 
 Write down for each model: model pull time, the five per-question seconds, any `FAILED` line (a `FAILED` means a call timed out after 3 retries of 120 s: treat that model as too slow).
 
-- [ ] **Step 8: Decide (D48) and clean up**
+- [x] **Step 8: Decide (D48) and clean up**
 
 Estimate = mean seconds per question × 26 (8 answers + 10 attacks + 8 benign) + 5 minutes (retrieval exam, mostly rules + embeddings). Apply the D48 rule from the header. Record: model, estimate, timeout, final sample size. Tell the user the numbers and the choice.
 
@@ -186,7 +186,7 @@ git push origin --delete timing-test && git branch -D timing-test
 - Consumes: nothing.
 - Produces: `Settings(data_dir, llm, ollama_url, ollama_model)` — no `github_*` fields. `LLM` accepts `ollama | fake`.
 
-- [ ] **Step 1: Update the tests first**
+- [x] **Step 1: Update the tests first**
 
 `tests/test_config.py`, `test_defaults` becomes:
 ```python
@@ -208,12 +208,12 @@ def test_github_provider_is_gone():
         complete(MSGS, settings=settings(llm="github"))
 ```
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `uv run pytest tests/test_config.py tests/llm/test_llm.py -q`
 Expected: FAIL (`hasattr` is true; error message still says "use ollama, github or fake").
 
-- [ ] **Step 3: Remove the code**
+- [x] **Step 3: Remove the code**
 
 ```bash
 git rm src/cve_copilot/llm/github.py
@@ -238,14 +238,14 @@ def complete(messages: list[dict], *, json_mode: bool = False,
     raise ValueError(f"Unknown LLM provider: {s.llm!r} (use ollama or fake)")
 ```
 
-- [ ] **Step 4: Check nothing else mentions it, run all tests**
+- [x] **Step 4: Check nothing else mentions it, run all tests**
 
 Run: `git grep -nE 'github_(url|model|token)|GITHUB_MODEL|GITHUB_TOKEN|LLM=github|llm\.github' -- ':!docs'`
 Expected: no output.
 Run: `uv run pytest -q`
 Expected: all pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A src/cve_copilot tests/test_config.py tests/llm/test_llm.py
@@ -271,7 +271,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `thresholds.check(exam: str, result: dict, path: Path = PATH) -> list[Miss]` — empty list means passed. Raises `KeyError` for an unknown exam or a metric missing from `result`.
   - `answers_exam.passes` and `guards_exam.passes` keep their signature `(result: dict) -> bool`.
 
-- [ ] **Step 1: Write the failing tests** — `tests/evals/test_thresholds.py`
+- [x] **Step 1: Write the failing tests** — `tests/evals/test_thresholds.py`
 
 ```python
 import pytest
@@ -324,12 +324,12 @@ def test_real_file_has_the_spec_marks():
     assert thresholds.PATH.name == "thresholds.toml"
 ```
 
-- [ ] **Step 2: Run to see it fail**
+- [x] **Step 2: Run to see it fail**
 
 Run: `uv run pytest tests/evals/test_thresholds.py -q`
 Expected: FAIL with `ImportError: cannot import name 'thresholds'`.
 
-- [ ] **Step 3: Write `evals/thresholds.toml`**
+- [x] **Step 3: Write `evals/thresholds.toml`**
 
 ```toml
 # Pass marks for every exam (D47). A key ending in _max is an upper limit;
@@ -350,7 +350,7 @@ block_rate = 0.95
 false_block_rate_max = 0.05
 ```
 
-- [ ] **Step 4: Write `evals/thresholds.py`**
+- [x] **Step 4: Write `evals/thresholds.py`**
 
 ```python
 """Pass marks for every exam, read from evals/thresholds.toml (D47).
@@ -396,7 +396,7 @@ def check(exam: str, result: dict, path: Path = PATH) -> list[Miss]:
 Run: `uv run pytest tests/evals/test_thresholds.py -q`
 Expected: 6 passed.
 
-- [ ] **Step 5: Switch the exams to the file**
+- [x] **Step 5: Switch the exams to the file**
 
 `evals/scan_exam.py`: add `from evals import thresholds`; last line of `main` becomes
 `    return 1 if thresholds.check("scan", result) else 0`
@@ -416,12 +416,12 @@ def passes(result: dict) -> bool:
     return not thresholds.check("guards", result)
 ```
 
-- [ ] **Step 6: Run everything**
+- [x] **Step 6: Run everything**
 
 Run: `uv run pytest -q && git grep -n "PASS_MARK" evals`
 Expected: all tests pass (the existing `test_pass_marks` cases in `tests/evals/test_guards_exam.py` still hold); the grep prints nothing.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add evals/thresholds.toml evals/thresholds.py evals/*_exam.py tests/evals/test_thresholds.py
@@ -443,7 +443,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 Note: the exams' own tests already run each exam with the fake LLM; these tests use a fake **runner** so `run.py`'s logic is tested without scripting dozens of LLM replies.
 
-- [ ] **Step 1: Write `evals/data/ci_sample.toml`**
+- [x] **Step 1: Write `evals/data/ci_sample.toml`**
 
 Use the sample size decided in Task 1 Step 8. Default (if D48 kept the full sample):
 ```toml
@@ -463,7 +463,7 @@ benign = ["bn1", "bn3", "bn6", "bn10", "bn16", "bn18", "bn21", "bn25"]
 ```
 If D48 shrank the sample, drop items from the end of each list but keep ≥ 2 per attack kind and keep `bn21`.
 
-- [ ] **Step 2: Write the failing tests** — `tests/evals/test_run.py`
+- [x] **Step 2: Write the failing tests** — `tests/evals/test_run.py`
 
 ```python
 import json
@@ -642,12 +642,12 @@ def test_unknown_exam_name_is_a_usage_error(tmp_path):
     assert exc.value.code == 2
 ```
 
-- [ ] **Step 3: Run to see them fail**
+- [x] **Step 3: Run to see them fail**
 
 Run: `uv run pytest tests/evals/test_run.py -q`
 Expected: FAIL with `ModuleNotFoundError: No module named 'evals.run'`.
 
-- [ ] **Step 4: Write `evals/run.py`**
+- [x] **Step 4: Write `evals/run.py`**
 
 ```python
 """Run any set of exams, compare each score with its pass mark, write a report (D44, D47).
@@ -830,12 +830,12 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `uv run pytest tests/evals/test_run.py -q`
 Expected: all pass. Then `uv run pytest -q`: all pass.
 
-- [ ] **Step 6: Try it for real (local Ollama)**
+- [x] **Step 6: Try it for real (local Ollama)**
 
 ```bash
 uv run python -m evals.run --exams scan,retrieval; echo "exit=$?"
@@ -844,7 +844,7 @@ uv run python -m evals.run --exams retrieval,answers,guards --sample; echo "exit
 ```
 Expected: first prints a PASS table and `exit=0`; second prints `**ERROR in answers:** LLMUnavailable: …` and `exit=2`; third (real Ollama, takes a while) prints the sample table: record the numbers for Task 6.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add evals/run.py evals/data/ci_sample.toml tests/evals/test_run.py
@@ -864,7 +864,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes: `python -m evals.run` (Task 4), `python -m cve_copilot.ingest --target frozen`, the model and timeout chosen in Task 1 (defaults below: `qwen2.5:7b`, 60 minutes; replace them with the D48 values).
 - Produces: CI jobs `checks` and `ai-exams`; artifacts `report-checks`, `report-ai-exams`.
 
-- [ ] **Step 1: Write the workflow**
+- [x] **Step 1: Write the workflow**
 
 ```yaml
 name: PR checks
@@ -964,12 +964,12 @@ jobs:
           if-no-files-found: ignore
 ```
 
-- [ ] **Step 2: Check the YAML parses**
+- [x] **Step 2: Check the YAML parses**
 
 Run: `uv run --with pyyaml python -c "import yaml; yaml.safe_load(open('.github/workflows/pr.yml')); print('ok')"`
 Expected: `ok`. (`--with` adds PyYAML for this one command only; it is not added to the project.)
 
-- [ ] **Step 3: Commit and push (ASK THE USER FIRST before pushing)**
+- [x] **Step 3: Commit and push (ASK THE USER FIRST before pushing)**
 
 ```bash
 git add .github/workflows/pr.yml
@@ -981,7 +981,7 @@ git push
 Watch: `gh run watch --exit-status "$(gh run list --branch phase6-ci --limit 1 --json databaseId -q '.[0].databaseId')"`
 Expected: `checks` green; `ai-exams` skipped (push event, no label).
 
-- [ ] **Step 4: Open the PR with the label (ASK THE USER FIRST)**
+- [x] **Step 4: Open the PR with the label (ASK THE USER FIRST)**
 
 ```bash
 gh label create ai-exams --description "Run the sampled AI exams in CI" --color 5319e7
@@ -993,7 +993,7 @@ Watch the PR run until both jobs finish:
 Expected: `checks` and `ai-exams` both pass, and the run's summary page shows the score table. Check with `gh run view <id>` and open the summary in the browser (`gh run view <id> --web`).
 If `ai-exams` fails with exit 1, read `report.md` from the artifact (`gh run download <id> -n report-ai-exams`) and treat it like any exam failure: find the cause, fix it, push again. If it fails with exit 2, read the error line and `ollama.log`; it's a CI problem, not a score problem.
 
-- [ ] **Step 5: Record the CI numbers** (scores from the summary, wall time of `ai-exams`, whether the model cache hit) for Task 6.
+- [x] **Step 5: Record the CI numbers** (scores from the summary, wall time of `ai-exams`, whether the model cache hit) for Task 6.
 
 ---
 
@@ -1006,18 +1006,18 @@ If `ai-exams` fails with exit 1, read `report.md` from the artifact (`gh run dow
 - Consumes: the numbers recorded in Task 1 Step 8, Task 4 Step 6 and Task 5 Step 5. Never invent a number.
 - Produces: nothing used by code.
 
-- [ ] **Step 1: Log D48** in section 4 of `docs/PROJECT_LOG.md`, after D47, in the same What/Why shape: the model chosen, the measured seconds per question for 7B and 3B, the estimate, the timeout, and the sample size.
+- [x] **Step 1: Log D48** in section 4 of `docs/PROJECT_LOG.md`, after D47, in the same What/Why shape: the model chosen, the measured seconds per question for 7B and 3B, the estimate, the timeout, and the sample size.
 
-- [ ] **Step 2: Dashboard** (section 6): add one row:
+- [x] **Step 2: Dashboard** (section 6): add one row:
 `| CI sample (ai-exams job) | all pass marks | <scores from Task 5> on <model> in <minutes> min | <date> |`
 
-- [ ] **Step 3: Day journal entry** for the day the work finishes (newest first), with What I did / What I learned / Open questions-next. Next = Phase 7 (Streamlit app, `nightly.yml`, live recall gap 87.9%).
+- [x] **Step 3: Day journal entry** for the day the work finishes (newest first), with What I did / What I learned / Open questions-next. Next = Phase 7 (Streamlit app, `nightly.yml`, live recall gap 87.9%).
 
-- [ ] **Step 4: Challenges** (section 8): add any real problem hit in Tasks 1–5 (for example the stray empty `cve.db` created by `sqlite3.connect`) with its fix.
+- [x] **Step 4: Challenges** (section 8): add any real problem hit in Tasks 1–5 (for example the stray empty `cve.db` created by `sqlite3.connect`) with its fix.
 
-- [ ] **Step 5: Mark Phase 6 done**: in the main spec's phase table, change row `| 6 | Evals + PR CI | …` to end with `✅ done <date>`; in the Phase 6 spec, change the first italic line to say it is implemented on that date.
+- [x] **Step 5: Mark Phase 6 done**: in the main spec's phase table, change row `| 6 | Evals + PR CI | …` to end with `✅ done <date>`; in the Phase 6 spec, change the first italic line to say it is implemented on that date.
 
-- [ ] **Step 6: README**: add this section (adjust the model line to D48's choice):
+- [x] **Step 6: README**: add this section (adjust the model line to D48's choice):
 
 ```markdown
 ## Exams and CI
@@ -1036,7 +1036,7 @@ CI (`.github/workflows/pr.yml`): every push runs the unit tests and the scan exa
 fixed sample of the answers and guards exams with `qwen2.5:7b` on the runner.
 ```
 
-- [ ] **Step 7: Commit and push**
+- [x] **Step 7: Commit and push**
 
 ```bash
 git add docs README.md

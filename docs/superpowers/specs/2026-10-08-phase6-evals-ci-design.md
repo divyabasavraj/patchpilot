@@ -1,6 +1,6 @@
 # Phase 6 — Evals runner + PR CI: design
 
-*Approved in conversation on 2026-10-08. Decisions D44–D47 in `docs/PROJECT_LOG.md`.
+*Status: ✅ Done 2026-10-09 (PR #1). Approved in conversation on 2026-10-08. Decisions D44–D48 in `docs/PROJECT_LOG.md`.
 This replaces sections 9 ("Pass marks" file name) and 10 (`pr.yml`) of
 `2026-09-26-cve-copilot-design.md` where they disagree.*
 

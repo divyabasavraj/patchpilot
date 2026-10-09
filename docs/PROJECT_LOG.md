@@ -292,6 +292,19 @@ Besides the packages the exams ask about, the snapshot deliberately includes pac
 
 *Newest entry first. One entry per work day.*
 
+### Day 12 — 2026-10-09: Phase 6 merged
+
+**What I did**
+- Checked PR #1's last CI run (18-question sample, timeout 40): `checks` and `ai-exams` both green.
+- Marked Phase 6 done in the main spec's phase table and the Phase 6 spec; ticked the plan boxes.
+- Merged PR #1 into `main`.
+
+**What I learned**
+- Don't push while the long CI job runs: a new push cancels it. Batch doc commits until the run is green.
+
+**Open questions / next**
+- Phase 7: Streamlit app, `nightly.yml` on fresh data, and the live recall gap (87.9%, below the 90% mark).
+
 ### Day 11 — 2026-10-08 (second session): Phase 6 built, CI live
 
 **What I did**
