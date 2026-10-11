@@ -1,7 +1,8 @@
 """Fetch the advisories that answer a routed question (spec 5.4).
 
 id route: exact lookup by ID or alias. package route: that package's advisories, ranked by
-meaning (D26). concept route: Chroma search. Duplicate records of one bug become one Doc (D24).
+meaning (D26). concept route: Chroma search plus the best keyword (BM25) matches (D49).
+Duplicate records of one bug become one Doc (D24).
 """
 import math
 import re
@@ -26,6 +27,7 @@ EmbedFn = Callable[[list[str]], list[list[float]]]
 MAX_LISTED_VERSIONS = 12   # explicit version lists can be hundreds long
 CANDIDATES_PER_RESULT = 4   # concept route: fetch 4 x k by meaning, then re-rank down to k
 KEYWORD_WEIGHT = 0.2       # hybrid re-rank: meaning score + 0.2 x keyword score (D28)
+KEYWORD_CANDIDATES = 10    # concept route: also re-rank the 10 best keyword matches (D49)
 _STOPWORDS = frozenset("""
     the and for are was were with that this from can does did has have how what when where which
     who why will would could should there their they them then than into onto about any all
@@ -189,22 +191,43 @@ def _cosine(a: np.ndarray, b: np.ndarray) -> float:
     return float(a @ b / (np.linalg.norm(a) * np.linalg.norm(b)))
 
 
+def keyword_candidates(con: sqlite3.Connection, question: str,
+                       n: int = KEYWORD_CANDIDATES) -> list[str]:
+    """IDs of the n best full-text (BM25) matches for the question's words. Empty for a DB
+    built before D49, which has no advisory_text table."""
+    words = sorted(_terms(question))
+    if not words or n <= 0:
+        return []
+    query = " OR ".join(f'"{w}"' for w in words)
+    try:
+        return [r[0] for r in con.execute(
+            "SELECT id FROM advisory_text WHERE advisory_text MATCH ? "
+            "ORDER BY bm25(advisory_text) LIMIT ?", (query, n))]
+    except sqlite3.OperationalError:
+        return []
+
+
+def _scored(col, qvec: np.ndarray, docs: list[Doc], sims: dict[str, float]) -> list[Doc]:
+    """Each doc with its best meaning score over its IDs; None when none of them is indexed."""
+    missing = sorted({n for d in docs for n in (d.id, *d.aliases)} - set(sims))
+    if missing:
+        got = col.get(ids=missing, include=["embeddings"])
+        sims = sims | {i: _cosine(qvec, np.asarray(v)) for i, v in zip(got["ids"], got["embeddings"])}
+    scored = []
+    for d in docs:
+        hits = [sims[n] for n in (d.id, *d.aliases) if n in sims]
+        scored.append(replace(d, score=max(hits) if hits else None))
+    return scored
+
+
 def _by_package(con, col, packages: tuple[str, ...], question: str, qvec: np.ndarray,
                 k: int) -> list[Doc]:
     where, args = _in("package", list(packages))
     ids = sorted({r[0] for r in con.execute(
         f"SELECT advisory_id FROM affected WHERE {where} "
         f"UNION SELECT advisory_id FROM affected_versions WHERE {where}", args + args)})
-    docs = load_docs(con, ids)
-    names = sorted({n for d in docs for n in (d.id, *d.aliases)})
-    got = col.get(ids=names, include=["embeddings"]) if names else {"ids": [], "embeddings": []}
-    sims = {i: _cosine(qvec, np.asarray(v)) for i, v in zip(got["ids"], got["embeddings"])}
-    scored = []
-    for d in docs:
-        hits = [sims[n] for n in (d.id, *d.aliases) if n in sims]
-        scored.append(replace(d, score=max(hits) if hits else None))
     # Not indexed (malware, D11) first: a malicious package matters more than any bug.
-    return _rerank(question, scored, k)
+    return _rerank(question, _scored(col, qvec, load_docs(con, ids), {}), k)
 
 
 def _by_meaning(con, col, question: str, qvec: np.ndarray, k: int) -> list[Doc]:
@@ -213,8 +236,9 @@ def _by_meaning(con, col, question: str, qvec: np.ndarray, k: int) -> list[Doc]:
         return []
     hits = col.query(query_embeddings=[qvec.tolist()], n_results=n, include=["distances"])
     sims = {i: 1.0 - dist for i, dist in zip(hits["ids"][0], hits["distances"][0])}
-    docs = load_docs(con, hits["ids"][0])
-    scored = [replace(d, score=max(sims[x] for x in (d.id, *d.aliases) if x in sims)) for d in docs]
+    # Meaning search blurs exact words ("debugger PIN"); keyword matches join the pool (D49).
+    ids = list(dict.fromkeys(hits["ids"][0] + keyword_candidates(con, question, KEYWORD_CANDIDATES)))
+    scored = [d for d in _scored(col, qvec, load_docs(con, ids), sims) if d.score is not None]
     return _rerank(question, scored, k)
 
 

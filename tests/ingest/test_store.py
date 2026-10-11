@@ -45,3 +45,15 @@ def test_refuses_to_overwrite(tmp_path):
     db.write_text("old")
     with pytest.raises(FileExistsError):
         write_db(db, [], [])
+
+
+def test_text_index_holds_searchable_advisories_only(tmp_path):
+    db = tmp_path / "cve.db"
+    write_db(db, [adv(summary="Debugger PIN randomness", details="too little entropy"),
+                  adv(id="MAL-1", summary="Malicious debugger")], [])
+    con = sqlite3.connect(db)
+    hits = con.execute("SELECT id FROM advisory_text WHERE advisory_text MATCH 'debugger'").fetchall()
+    assert hits == [("GHSA-1",)]   # malware is not searchable, as in the Chroma index (D11)
+    # Porter stemming: "pins" finds "PIN".
+    assert con.execute("SELECT id FROM advisory_text WHERE advisory_text MATCH 'pins'").fetchall() == [
+        ("GHSA-1",)]
