@@ -1,0 +1,106 @@
+name: Nightly data
+
+# Fresh data, fixed code (spec 6, D50): download today's OSV + KEV data, build it, and run the
+# exams with the code on main. Pass: publish the data as the release asset `data-latest`, which
+# the app pulls with `python -m cve_copilot.ingest --pull-release`. Fail: open (or update) an
+# issue with the report, and yesterday's data stays published.
+#
+# The scan exam is not run here: its answer key comes from the frozen raw files, so new
+# advisories would "fail" it without any bug. It runs on every push in pr.yml instead.
+
+on:
+  schedule:
+    - cron: "17 2 * * *"        # 02:17 UTC daily; off the hour, when runners are busiest
+  workflow_dispatch:
+
+permissions:
+  contents: write               # create/update the data-latest release
+  issues: write                 # report a failed night
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+env:
+  FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
+  LLM: ollama
+  OLLAMA_MODEL: qwen2.5:7b      # D48: same model as the PR exams
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90          # D50: ingest + embedding (~25 min est.) + the 18-min PR exam job
+    steps:
+      - uses: actions/checkout@v4      # schedule: main; manual run: the branch you pick
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/fastembed
+          key: fastembed-bge-small-en-v1.5
+      - run: uv sync
+      - name: Download and build today's data
+        run: uv run python -m cve_copilot.ingest --target live
+      - uses: ./.github/actions/setup-ollama
+        with:
+          model: ${{ env.OLLAMA_MODEL }}
+      - name: Exams on live data
+        id: exams
+        run: |
+          set +e
+          uv run python -m evals.run --target live --exams retrieval,answers,guards --sample
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit $code
+
+      - name: Publish data-latest
+        if: success()
+        run: |
+          uv run python -m cve_copilot.ingest --pack-release dist
+          built=$(jq -r .built_at data/live/manifest.json)
+          { echo "Data built $built, exams passed on commit ${GITHUB_SHA::7}."; echo
+            echo '```json'; cat data/live/manifest.json; echo '```'; echo
+            cat evals/report.md; } > notes.md
+          if gh release view data-latest >/dev/null 2>&1; then
+            gh release edit data-latest --title "Nightly data $built" --notes-file notes.md
+          else
+            gh release create data-latest --title "Nightly data $built" --notes-file notes.md \
+              --latest=false
+          fi
+          # Archive first, checksum second: an app pulling in between gets a checksum
+          # mismatch and keeps its old data, never a half-new set.
+          gh release upload data-latest dist/cve-data.tar.gz --clobber
+          gh release upload data-latest dist/cve-data.tar.gz.sha256 --clobber
+
+      - name: Report a failed night
+        if: failure()
+        run: |
+          code="${{ steps.exams.outputs.code }}"
+          if [ "$code" = "1" ]; then
+            title="Nightly: a score missed its pass mark on new data"
+          else
+            title="Nightly: infrastructure error (download, build, Ollama or CI)"
+          fi
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          { echo "Run: $run_url"; echo; cat evals/report.md 2>/dev/null ||
+            echo "No exam report: the job failed before the exams finished."; } > body.md
+          gh label create nightly --color B60205 --description "Nightly data job" 2>/dev/null || true
+          open=$(gh issue list --label nightly --state open --search "in:title \"$title\"" \
+                 --json number --jq '.[0].number')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body-file body.md
+          else
+            gh issue create --title "$title" --label nightly --body-file body.md
+          fi
+
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-nightly
+          path: |
+            evals/report.json
+            evals/report.md
+            data/live/manifest.json
+          if-no-files-found: ignore
