@@ -32,16 +32,10 @@ def format_result(route: Route, docs: list[Doc]) -> str:
     return "\n".join(lines)
 
 
-def format_answer(result: Answer) -> str:
-    t = result.trace
-    lines = [result.text, ""]
-    if result.sources:
-        lines.append("Sources:")
-        lines += [f"  {d.id:<22} {d.summary[:70]}" for d in result.sources]
+def format_trace(t) -> str:
     if t.route is None:
-        lines.append(f"Trace: input guard={t.input_label} ({t.input_by}), outcome={t.outcome}")
-        return "\n".join(lines)
-    trace = f"Trace: route={t.route.kind} ({t.route.by}), retrieved={len(t.retrieved)}, " \
+        return f"input guard={t.input_label} ({t.input_by}), outcome={t.outcome}"
+    trace = f"route={t.route.kind} ({t.route.by}), retrieved={len(t.retrieved)}, " \
             f"relevant={len(t.graded)}, outcome={t.outcome}"
     if t.dropped:
         trace += f", dropped={','.join(f'{i} ({why})' for i, why in t.dropped)}"
@@ -51,7 +45,15 @@ def format_answer(result: Answer) -> str:
         trace += f", rewritten query={t.rewritten_query!r}"
     if t.grader_error:
         trace += f", grader error={t.grader_error}"
-    lines.append(trace)
+    return trace
+
+
+def format_answer(result: Answer) -> str:
+    lines = [result.text, ""]
+    if result.sources:
+        lines.append("Sources:")
+        lines += [f"  {d.id:<22} {d.summary[:70]}" for d in result.sources]
+    lines.append(f"Trace: {format_trace(result.trace)}")
     return "\n".join(lines)
 
 
