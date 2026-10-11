@@ -1,4 +1,6 @@
-"""CLI: uv run python -m cve_copilot.ingest --target live|frozen"""
+"""CLI: uv run python -m cve_copilot.ingest --target live|frozen
+       uv run python -m cve_copilot.ingest --pull-release        (nightly data into data/live)
+       uv run python -m cve_copilot.ingest --pack-release DIR    (CI: data/live into a tarball)"""
 import argparse
 import hashlib
 import json
@@ -9,6 +11,7 @@ from pathlib import Path
 import httpx
 
 from ..config import Settings
+from . import release
 from .build import build
 from .sources import KEV_URL, OSV_URL, download, iter_osv_files
 
@@ -16,13 +19,31 @@ from .sources import KEV_URL, OSV_URL, download, iter_osv_files
 def main(argv: list[str] | None = None, *, embed_fn=None, downloader=None) -> int:
     parser = argparse.ArgumentParser(prog="cve_copilot.ingest")
     parser.add_argument("--target", choices=["live", "frozen"], default="live")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--pull-release", action="store_true",
+                      help="download the data the nightly CI job published (D50)")
+    mode.add_argument("--pack-release", type=Path, metavar="DIR",
+                      help="pack data/live into DIR/cve-data.tar.gz (+ .sha256)")
     args = parser.parse_args(argv)
 
-    if embed_fn is None:
-        from ..embeddings import embed as embed_fn
     downloader = downloader or download
     settings = Settings.from_env()
     data_dir = settings.data_dir
+    if args.pull_release:
+        try:
+            manifest = release.pull(settings.release_repo, settings.db_dir("live"),
+                                    downloader=downloader)
+        except (httpx.HTTPError, release.ReleaseError) as e:
+            print(f"Pull failed: {e}. Existing data kept.", file=sys.stderr)
+            return 1
+        print(json.dumps(manifest, indent=2))
+        return 0
+    if args.pack_release:
+        print(release.pack(settings.db_dir("live"), args.pack_release))
+        return 0
+
+    if embed_fn is None:
+        from ..embeddings import embed as embed_fn
 
     if args.target == "live":
         with tempfile.TemporaryDirectory() as tmp:
