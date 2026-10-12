@@ -61,6 +61,10 @@ A daily record of building this project: what I built, why I made each decision,
 | **Re-ranking** | Fetch a wider set of candidates first, then sort them again with a second, more careful score, and keep the best few. |
 | **Held-out questions** | Exam questions written *after* tuning and never used to tune, to check the tuning didn't just memorise the exam. |
 | **False-block rate** | How often the guard wrongly refuses a normal, safe question. |
+| **BM25 / full-text search** | Classic keyword search: documents that contain the question's words score higher, and rare words count more. SQLite has it built in (FTS5). |
+| **Cross-encoder** | A small model that reads the question and one document *together* and scores the pair. More careful than embeddings, but slower; I tested it and it didn't help here. |
+| **Release asset** | A file attached to a GitHub release. The nightly job publishes the tested data this way, and the app downloads it. |
+| **Checksum (SHA-256)** | A fingerprint of a file. If even one byte changes, the fingerprint changes, so a corrupted or swapped download is caught. |
 
 ---
 
@@ -286,18 +290,50 @@ Besides the packages the exams ask about, the snapshot deliberately includes pac
 - **Measured:** a throwaway timing run on `ubuntu-latest` (5 CLI questions, one cold process each): 3B mean 129 s, 7B mean 248 s per question (worst: the multi-package scan question, 401 s / 802 s). Real CI exam run (one warm process): retrieval + 18 questions in 11 min 49 s, whole job 17 min 42 s.
 - **Why:** the plan's rule picked 3B, but 3B on the sample wrongly refused a benign question ("Is there an exploit in the wild for CVE-2019-2222?"): false-block 20%. A model that fails the exam is no fallback. The full 26-question sample failed in CI: the long "most urgent package" scan prompt took over 120 s per AI call on a CPU runner (exit 2). The full 26 still run locally.
 
+### D49. Keyword search joins meaning search; the answer key grows with the data (2026-10-11)
+- **What:** the build adds a SQLite FTS5 full-text table of the indexed advisories. On the concept route, the 10 best keyword (BM25) matches join the 20 meaning-search candidates before the existing hybrid re-rank (D28). An old DB without the table still works (no keyword candidates). The `h-mlflow-traversal` answer key accepts all 21 mlflow path-traversal advisories in live data, not just one.
+- **Measured (live data of 2026-09-28):** recall@5 87.9% → 93.9% (31/33); frozen stays 100%.
+- **Why:** each of the four live misses was checked by hand. The werkzeug one ranked 1st once it was a candidate, but meaning search never put it in the pool, and a rare exact phrase is what keyword search is good at. The mlflow "miss" was my answer key, not the system. The other two need knowledge that isn't in the documents (binwalk is a "firmware" tool; the router picks `ecdsa` instead of `starkbank-ecdsa`), so they stay documented misses rather than one-question tuning.
+- **Rejected:** fastembed cross-encoder re-rankers (MiniLM: live unchanged and a frozen item broke; jina-turbo: live 84.8%) and a larger keyword pool (20 or 40: noise pushed live back to 87.9%).
+
+### D50. Nightly job publishes tested data as a release asset; the app pulls it (2026-10-11)
+- **What:** `nightly.yml` (02:17 UTC + manual) builds today's data, runs the retrieval exam and the CI sample of answers and guards on it with the code on `main`, then either uploads `cve-data.tar.gz` + `.sha256` to the `data-latest` release (pass) or opens/comments on one issue per failure kind (fail). `--pull-release` downloads it, checks the SHA-256, extracts with tarfile's `data` filter and swaps it in like a build does; any failure keeps the old data. The scan exam is not run nightly: its key comes from the frozen raw files, so new advisories would fail it with no bug.
+- **Why:** the app should only ever see data that passed the exams. A release asset is free, public and needs no extra service. The archive is uploaded before the checksum, so someone pulling mid-upload gets a mismatch and keeps their old data. The `data` filter stops a malicious archive from writing outside the folder (path traversal, the same bug class as the mlflow advisories).
+
+### D51. The app is a thin page over tested helpers (2026-10-11)
+- **What:** `app.py` (Streamlit) only lays out the page; formatting, data-status and cache handling live in `ui.py`, which has no Streamlit code and has unit tests. The page itself is tested headless with Streamlit's `AppTest`. Scanning works without Ollama; chat shows a message with the fix command when the model is missing. *Reload data* clears the cached Chroma client after a pull swaps the folder. Usage statistics are off.
+- **Why:** UI code is hard to test, so keep as little logic in it as possible. A missing model shouldn't crash the page or block the part that needs no AI.
+
 ---
 
 ## 5. Daily journal
 
 *Newest entry first. One entry per work day.*
 
+### Day 13 — 2026-10-11 to 2026-10-12: Phase 7 built, all exams pass on fresh live data
+
+**What I did**
+- 2026-10-11: built Phase 7: keyword candidates in retrieval (D49), nightly data releases (D50), Streamlit app (D51). Committed on the `phase7-app` branch.
+- 2026-10-12: rebuilt live data from scratch (the first try was interrupted, see challenges). Fresh data: 25,604 advisories, 13,808 searchable, 11,796 malware, 616 withdrawn, 23 flagged, 1,739 KEV, 0 malformed. About 20 min, most of it embeddings.
+- Ran the AI exams one at a time on the fresh live data with `qwen2.5:7b`:
+  - Retrieval (`uv run python -m evals.retrieval_exam --target live`): recall@5 **93.9%** (31/33), route accuracy 97.4%. Same misses as D49: `h-binwalk-symlink` (right route, not in top 5) and `h-ecdsa-signature` (routed to the package route instead of concept).
+  - Guards (`uv run python -m evals.guards_exam --target live`): block rate **100%** (questions, planted and flagged all 100%), false-block **0%**. 2 benign questions (`bn9`, `bn21`) got the "couldn't find" fallback, not a refusal.
+  - Answers (`uv run python -m evals.answers_exam --target live`, 20 questions): citation accuracy, coverage, groundedness, correctness and version accuracy all **100%**, 0 fallbacks. 8 of 20 answers were regenerated after the grader rejected the first draft.
+
+**What I learned**
+- Run the heavy jobs (build, then each exam) one after another, not together, and keep the Mac awake with `caffeinate -w <pid>`. Closing the lid pauses everything.
+- The self-check matters: 8 first drafts were rejected and fixed before anyone saw them.
+
+**Open questions / next**
+- Commit the docs, merge PR #1, then check that the first nightly run on `main` passes.
+- Phase 8 (polish): screenshot or GIF for the README, final interview notes.
+
 ### Day 12 — 2026-10-09: Phase 6 merged
 
 **What I did**
 - Checked PR #1's last CI run (18-question sample, timeout 40): `checks` and `ai-exams` both green.
 - Marked Phase 6 done in the main spec's phase table and the Phase 6 spec; ticked the plan boxes.
-- Merged PR #1 into `main`.
+- PR #1 is green and ready, but not merged yet: the merge needs my own click on GitHub (corrected 2026-10-11; this line first said "merged").
 
 **What I learned**
 - Don't push while the long CI job runs: a new push cancels it. Batch doc commits until the run is green.
@@ -599,11 +635,12 @@ Skipped:
 | Metric | Target | Current | Date |
 |---|---|---|---|
 | Scanner accuracy (scan cases) | 100% | 100% (26/26 cases) | 2026-09-30 |
-| Retrieval recall@5 | ≥ 90% | 100% frozen (33/33); 87.9% on live data | 2026-10-01 |
+| Retrieval recall@5 | ≥ 90% | 100% frozen (33/33); 93.9% on live data (31/33) | 2026-10-12 |
 | Citation accuracy | ≥ 98% | 100% (answers exam, 20 questions) | 2026-10-01 |
 | Groundedness | ≥ 90% | 100% (local `qwen2.5:7b` as judge) | 2026-10-05 |
 | Attack block rate | ≥ 95% | 100% frozen (32 attacks) | 2026-10-05 |
 | False-block rate | ≤ 5% | 0% frozen (27 benign questions) | 2026-10-05 |
+| Full AI exams on fresh live data | all pass marks | recall 93.9%, citation acc. 100%, groundedness 100%, block 100%, false-block 0% | 2026-10-12 |
 | CI sample (ai-exams job) | all pass marks | recall 100%, citation acc. 100%, groundedness 100%, block 100%, false-block 0% on `qwen2.5:7b` in 18 min (18 questions) | 2026-10-08 |
 
 ---
@@ -625,7 +662,13 @@ It has its own exam: attack questions (must be blocked) and normal questions tha
 It doesn't run the same pipeline for every question. A router picks the route per question, and a grader decides whether the results are good enough, retrying with a rewritten query or admitting it doesn't know.
 
 **Q: How does your CI work if you only use free models?**
-The CI machine runs the same model as my laptop (Ollama + `qwen2.5:7b`). GitHub Models, my first plan, was retired before I got there. A CPU runner is slow, so every push runs only the cheap exact checks, and a fixed 18-question sample of the AI exams runs when a PR gets the `ai-exams` label. Code changes are tested on frozen data, and nightly data updates are tested on frozen code, so every score change has one clear cause.
+The CI machine runs the same open model I use locally (`qwen2.5:7b` in Ollama) on GitHub's free runners; the model is cached between runs. Cheap exact checks run on every push; the slow AI exams run on a fixed 18-question sample when a PR asks for them. I first planned GitHub Models, but it was retired, and I found that by testing the API before building on it.
+
+**Q: How do you keep the data fresh without breaking things?**
+A nightly job downloads that day's advisories, rebuilds the database and runs the AI exams on it with the code on `main`. Only if every score passes is the data published as a release that the app pulls; if not, it opens an issue and yesterday's data stays live. Code changes are tested on frozen data and data changes on frozen code, so when a score moves there is one cause to look at.
+
+**Q: Your retrieval score dropped on real data. What did you do?**
+Recall was 100% on the small test snapshot but 87.9% on the full database. I looked at each miss instead of tuning a number: one was a candidate-pool problem (fixed by adding keyword search as a second way in, BM25 through SQLite's built-in full-text index), one was my own answer key being too narrow for the bigger data, and two need knowledge the documents don't contain. I also tried a cross-encoder re-ranker; it made things worse, so I didn't ship it. Recall went to 93.9% on the same data.
 
 **Q: What would you do differently / next?**
 *(Fill in at the end: see roadmap.)*
@@ -658,6 +701,8 @@ The CI machine runs the same model as my laptop (Ollama + `qwen2.5:7b`). GitHub 
 | 2026-10-08 | A 0-byte `data/frozen/cve.db` was committed | `sqlite3.connect()` silently creates a missing file; a test opened the DB before it was built | Untracked + ignored; the test now checks the file exists; `run.py` checks before connecting (exit 2 + "build it first") | Libraries that "helpfully" create files hide missing-input bugs |
 | 2026-10-08 | The CI time estimate said ~112 min for 7B | Timing ran each question in a new process (cold model) and included a 802 s scan question | Measured the real job instead: 18 min | Measure the thing you'll actually run |
 | 2026-10-08 | Full 26-question CI sample failed with exit 2 | The multi-package scan prompt needs > 120 s per AI call on a CPU runner | Kept it for local runs; CI uses 18 questions | Slow hardware changes which tests are practical, not the pass marks |
+| 2026-10-11 | Live recall@5 87.9%, below the 90% nightly pass mark | Four different causes: a candidate never entered the meaning-search pool; an answer key that listed 1 of 21 correct advisories; two questions needing outside knowledge | Keyword (BM25) candidates join the pool; widened the key with a written rule; documented the other two. 93.9% (D49) | Read each miss before changing anything; a "fancier" fix (cross-encoder) made it worse |
+| 2026-10-12 | A live rebuild left a half-built `data/live.building` and the old data in place | The session that ran it ended before the build finished | Nothing to fix: the build swaps folders only at the end, so the app kept the old data; deleted the leftover and rebuilt | The atomic swap paid off: an interrupted job can't leave a broken database |
 
 ---
 
