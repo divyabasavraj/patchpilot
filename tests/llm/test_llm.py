@@ -5,7 +5,7 @@ import httpx
 import pytest
 
 from cve_copilot.config import Settings
-from cve_copilot.llm import complete, fake, github, ollama
+from cve_copilot.llm import complete, fake, ollama
 from cve_copilot.llm.retry import LLMUnavailable, with_retry
 
 MSGS = [{"role": "user", "content": "hello"}]
@@ -61,25 +61,9 @@ def test_ollama_down_gives_helpful_error():
                         client=mock_client(handler), sleep=NO_SLEEP)
 
 
-def test_github_request_shape():
-    seen = {}
-
-    def handler(req):
-        seen["auth"] = req.headers["authorization"]
-        seen["body"] = json.loads(req.content)
-        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
-
-    out = github.complete(MSGS, json_mode=True, settings=settings(github_token="tok"),
-                          client=mock_client(handler), sleep=NO_SLEEP)
-    assert out == "ok"
-    assert seen["auth"] == "Bearer tok"
-    assert seen["body"]["temperature"] == 0
-    assert seen["body"]["response_format"] == {"type": "json_object"}
-
-
-def test_github_without_token_fails_clearly():
-    with pytest.raises(LLMUnavailable, match="GITHUB_TOKEN"):
-        github.complete(MSGS, json_mode=False, settings=settings(github_token=None))
+def test_github_provider_is_gone():
+    with pytest.raises(ValueError, match="use ollama or fake"):
+        complete(MSGS, settings=settings(llm="github"))
 
 
 def test_retry_then_success():

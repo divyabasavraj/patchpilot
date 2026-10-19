@@ -12,9 +12,6 @@ class Settings:
     llm: str
     ollama_url: str
     ollama_model: str
-    github_url: str
-    github_model: str
-    github_token: str | None
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -24,11 +21,6 @@ class Settings:
             llm=env("LLM", "ollama"),
             ollama_url=env("OLLAMA_URL", "http://localhost:11434"),
             ollama_model=env("OLLAMA_MODEL", "qwen2.5:7b"),
-            # Endpoint and model are re-checked when CI is set up (Phase 6).
-            github_url=env("GITHUB_MODELS_URL",
-                           "https://models.github.ai/inference/chat/completions"),
-            github_model=env("GITHUB_MODEL", "openai/gpt-4o-mini"),
-            github_token=env("GITHUB_TOKEN"),
         )
 
     def db_dir(self, target: str) -> Path:

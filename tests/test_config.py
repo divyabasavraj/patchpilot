@@ -6,16 +6,14 @@ from cve_copilot.config import PROJECT_ROOT, Settings
 
 
 def test_defaults(monkeypatch):
-    for var in ["CVE_DATA_DIR", "LLM", "OLLAMA_URL", "OLLAMA_MODEL",
-                "GITHUB_MODELS_URL", "GITHUB_MODEL", "GITHUB_TOKEN"]:
+    for var in ["CVE_DATA_DIR", "LLM", "OLLAMA_URL", "OLLAMA_MODEL"]:
         monkeypatch.delenv(var, raising=False)
     s = Settings.from_env()
     assert s.data_dir == PROJECT_ROOT / "data"
     assert s.llm == "ollama"
     assert s.ollama_url == "http://localhost:11434"
     assert s.ollama_model == "qwen2.5:7b"
-    assert s.github_model == "openai/gpt-4o-mini"
-    assert s.github_token is None
+    assert not hasattr(s, "github_token")
 
 
 def test_env_overrides(monkeypatch, tmp_path):

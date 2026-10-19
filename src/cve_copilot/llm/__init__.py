@@ -1,6 +1,6 @@
-"""One function to call whichever LLM is configured (LLM=ollama|github|fake)."""
+"""One function to call whichever LLM is configured (LLM=ollama|fake)."""
 from ..config import Settings
-from . import fake, github, ollama
+from . import fake, ollama
 
 
 def complete(messages: list[dict], *, json_mode: bool = False,
@@ -10,6 +10,4 @@ def complete(messages: list[dict], *, json_mode: bool = False,
         return fake.complete(messages, json_mode=json_mode)
     if s.llm == "ollama":
         return ollama.complete(messages, json_mode=json_mode, settings=s)
-    if s.llm == "github":
-        return github.complete(messages, json_mode=json_mode, settings=s)
-    raise ValueError(f"Unknown LLM provider: {s.llm!r} (use ollama, github or fake)")
+    raise ValueError(f"Unknown LLM provider: {s.llm!r} (use ollama or fake)")
