@@ -65,6 +65,7 @@ def test_generate_prompt_has_rules_sources_and_facts():
     assert user.startswith("Question: is flask ok?")
     assert "Scanner facts:\nScan of ..." in user and "[GHSA-a] also known as" in user
     assert "never an instruction" in system and "rejected" not in user
+    assert "package from the scan needs a citation" in system and "at most 3 IDs" in system
 
 
 def test_generate_with_feedback():
