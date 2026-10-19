@@ -169,6 +169,16 @@ def test_step_summary_written_only_when_set(tmp_path, monkeypatch, value):
     assert sorted(p.name for p in tmp_path.iterdir()) == ["report.json", "report.md"]
 
 
+def test_out_folder_is_created(tmp_path, monkeypatch):
+    # a missing --out folder must not lose a finished 30-minute run
+    monkeypatch.setattr(runner_mod, "run",
+                        lambda exams, db_dir, sample=None: {"sample": False, "exams": {},
+                                                            "error": None})
+    out = tmp_path / "new" / "reports"
+    assert main(["--exams", "scan", "--out", str(out)]) == 0
+    assert (out / "report.json").exists() and (out / "report.md").exists()
+
+
 def test_step_summary_appended_when_set(tmp_path, monkeypatch):
     summary = tmp_path / "summary.md"
     summary.write_text("earlier step\n")
