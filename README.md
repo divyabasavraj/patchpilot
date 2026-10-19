@@ -5,6 +5,23 @@ A chat assistant for Python security advisories. Ask about a CVE or a package, o
 the AI only explains them, and three guards check the question, the sources and the answer.
 Built with free tools only: Ollama (`qwen2.5:7b`), OSV.dev, CISA KEV, SQLite, Chroma.
 
+![Scan tab: 70 findings in a 5-package requirements file, with CVSS, KEV flag and fix version](docs/images/scan.png)
+
+![Chat tab: "Which of my packages should I fix first?" answered with a citation on every claim](docs/images/chat.png)
+
+| Exam (full set, `qwen2.5:7b`) | Pass mark | Frozen data | Live data |
+|---|---|---|---|
+| Scanner accuracy (26 cases) | 100% | 100% | – |
+| Retrieval recall@5 (33 questions) | ≥ 90% | 100% | 93.9% |
+| Citation accuracy (answers exam) | ≥ 98% | 100% | 100% |
+| Groundedness (AI judge) | ≥ 90% | 100% | 100% |
+| Attack block rate (32 attacks) | ≥ 95% | 100% | 100% |
+| False-block rate (27 benign) | ≤ 5% | 0% | 0% |
+
+Frozen: answers and guards measured 2026-10-19 (21 answer questions). Live: data of 2026-10-12,
+measured before the D52 prompt rule (20 answer questions); the nightly job re-measures it. Every decision and failure behind these numbers
+is in [`docs/PROJECT_LOG.md`](docs/PROJECT_LOG.md).
+
 ## Run it
 
 Needs [uv](https://docs.astral.sh/uv/) and [Ollama](https://ollama.com) (`ollama pull qwen2.5:7b`).
