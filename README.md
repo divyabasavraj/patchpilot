@@ -1,4 +1,4 @@
-# CVE Copilot
+# PatchPilot
 
 A chat assistant for Python security advisories. Ask about a CVE or a package, or upload a
 `requirements.txt`, and get a cited answer. Facts such as affected versions come from code;
