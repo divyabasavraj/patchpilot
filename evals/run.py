@@ -142,6 +142,7 @@ def to_markdown(report: dict) -> str:
 
 def write(report: dict, out_dir: Path) -> str:
     md = to_markdown(report)
+    out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "report.json").write_text(json.dumps(report, indent=2, default=str))
     (out_dir / "report.md").write_text(md)
     summary = os.environ.get("GITHUB_STEP_SUMMARY")

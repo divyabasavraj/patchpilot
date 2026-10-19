@@ -12,6 +12,7 @@ class Settings:
     llm: str
     ollama_url: str
     ollama_model: str
+    release_repo: str = "divyabasavraj/cve-copilot"   # where the nightly data is published
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -21,6 +22,7 @@ class Settings:
             llm=env("LLM", "ollama"),
             ollama_url=env("OLLAMA_URL", "http://localhost:11434"),
             ollama_model=env("OLLAMA_MODEL", "qwen2.5:7b"),
+            release_repo=env("CVE_RELEASE_REPO", "divyabasavraj/cve-copilot"),
         )
 
     def db_dir(self, target: str) -> Path:

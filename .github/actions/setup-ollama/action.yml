@@ -1,0 +1,25 @@
+name: Set up Ollama
+description: Install Ollama, start it, and pull the model (cached between runs). Used by pr.yml and nightly.yml.
+inputs:
+  model:
+    description: Ollama model to pull
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@v4
+      with:
+        path: /home/runner/ollama-models
+        key: ollama-${{ inputs.model }}
+    - name: Install and start Ollama
+      shell: bash
+      run: |
+        curl -fsSL https://ollama.com/install.sh | sh
+        sudo systemctl stop ollama || true
+        mkdir -p /home/runner/ollama-models
+        OLLAMA_MODELS=/home/runner/ollama-models nohup ollama serve > /home/runner/ollama.log 2>&1 &
+        for i in $(seq 1 30); do curl -sf http://localhost:11434/api/tags >/dev/null && break; sleep 1; done
+        curl -sf http://localhost:11434/api/tags >/dev/null || { cat /home/runner/ollama.log; exit 1; }
+    - name: Pull model (cached after the first run)
+      shell: bash
+      run: ollama pull "${{ inputs.model }}"

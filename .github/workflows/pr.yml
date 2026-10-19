@@ -66,23 +66,12 @@ jobs:
         with:
           path: /home/runner/.cache/fastembed
           key: fastembed-bge-small-en-v1.5
-      - uses: actions/cache@v4
-        with:
-          path: /home/runner/ollama-models
-          key: ollama-${{ env.OLLAMA_MODEL }}
       - run: uv sync
       - name: Build the frozen DB
         run: uv run python -m cve_copilot.ingest --target frozen
-      - name: Install and start Ollama
-        run: |
-          curl -fsSL https://ollama.com/install.sh | sh
-          sudo systemctl stop ollama || true
-          mkdir -p /home/runner/ollama-models
-          OLLAMA_MODELS=/home/runner/ollama-models nohup ollama serve > /home/runner/ollama.log 2>&1 &
-          for i in $(seq 1 30); do curl -sf http://localhost:11434/api/tags >/dev/null && break; sleep 1; done
-          curl -sf http://localhost:11434/api/tags >/dev/null || { cat /home/runner/ollama.log; exit 1; }
-      - name: Pull model (cached after the first run)
-        run: ollama pull "$OLLAMA_MODEL"
+      - uses: ./.github/actions/setup-ollama
+        with:
+          model: ${{ env.OLLAMA_MODEL }}
       - name: Retrieval exam + sampled answers and guards exams
         run: uv run python -m evals.run --exams retrieval,answers,guards --sample
       - if: always()

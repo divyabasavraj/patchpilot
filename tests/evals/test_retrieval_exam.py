@@ -45,5 +45,9 @@ def test_expected_ids_exist_in_frozen_db():
     assert len(cases) >= 30
     for case in cases:
         assert case["route"] in {"id", "package", "concept", "chat"}
-        for adv_id in (i for e in case["expected"] for i in (e if isinstance(e, list) else [e])):
-            assert con.execute("SELECT 1 FROM advisories WHERE id = ?", (adv_id,)).fetchone(), adv_id
+        # Each expected entry needs one alternative in the frozen DB, or the frozen exam could
+        # never pass; the others may exist only in live data (h-mlflow-traversal, D49).
+        for entry in case["expected"]:
+            alternatives = entry if isinstance(entry, list) else [entry]
+            assert any(con.execute("SELECT 1 FROM advisories WHERE id = ?", (i,)).fetchone()
+                       for i in alternatives), (case["id"], alternatives)

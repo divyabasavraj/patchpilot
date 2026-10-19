@@ -1,9 +1,11 @@
+import sqlite3
 from contextlib import closing
 
 import pytest
 
 from cve_copilot.rag.models import Route
-from cve_copilot.rag.retriever import load_docs, package_names, retrieve
+from cve_copilot.rag import retriever
+from cve_copilot.rag.retriever import keyword_candidates, load_docs, package_names, retrieve
 from cve_copilot.scanner.db import open_db
 
 from .fixture_index import build_fixture, fake_embed
@@ -130,3 +132,30 @@ def test_range_words_never_need_working_out():
     assert _range_words("2.0", "2.2.5", None) == "2.0 and later versions before 2.2.5 (fixed in 2.2.5)"
     assert _range_words("1.0", None, None) == "1.0 and later versions (no fixed version)"
     assert _range_words(None, None, None) == "all versions (no fixed version)"
+
+
+def test_keyword_candidates_rank_by_bm25(db_dir):
+    with closing(open_db(db_dir / "cve.db")) as con:
+        assert keyword_candidates(con, "debugger pin guessable", 3)[0] == "GHSA-pin-1"
+        assert keyword_candidates(con, "the and of", 3) == []      # only stopwords: no query
+        assert "MAL-2024-1" not in keyword_candidates(con, "malicious reqeusts", 5)
+
+
+def test_keyword_candidates_on_a_db_without_text_index(tmp_path):
+    con = sqlite3.connect(tmp_path / "old.db")   # built before D49: no advisory_text table
+    assert keyword_candidates(con, "debugger pin", 3) == []
+
+
+def test_concept_route_adds_keyword_matches_meaning_missed(db_dir, monkeypatch):
+    # The fake vectors know nothing of "debugger", so a meaning pool of 3 misses the pin doc;
+    # the keyword match adds it to the docs that get re-ranked.
+    pools = []
+    real = retriever.load_docs
+    monkeypatch.setattr(retriever, "load_docs", lambda con, ids: pools.append(list(ids)) or real(con, ids))
+    monkeypatch.setattr(retriever, "CANDIDATES_PER_RESULT", 1)
+    ask(Route("concept"), "session guessable debugger", db_dir, k=3)
+    monkeypatch.setattr(retriever, "KEYWORD_CANDIDATES", 0)
+    ask(Route("concept"), "session guessable debugger", db_dir, k=3)
+    with_keywords, meaning_only = pools
+    assert "GHSA-pin-1" not in meaning_only
+    assert "GHSA-pin-1" in with_keywords

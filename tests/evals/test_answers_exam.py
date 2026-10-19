@@ -115,6 +115,6 @@ def test_guard_outcomes_and_first_drafts(tmp_path, monkeypatch):
 
 def test_exam_file_shape():
     cases = [json.loads(line) for line in CASES.read_text().splitlines() if line.strip()]
-    assert len(cases) == 20
+    assert len(cases) == 21
     assert sum(c["expect_not_found"] for c in cases) == 2
     assert all(c["expected_ids"] for c in cases if not c["expect_not_found"])

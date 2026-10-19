@@ -1,0 +1,5 @@
+[browser]
+gatherUsageStats = false   # a security tool should not phone home
+
+[server]
+headless = true

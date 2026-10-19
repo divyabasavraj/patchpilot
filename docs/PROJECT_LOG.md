@@ -61,6 +61,10 @@ A daily record of building this project: what I built, why I made each decision,
 | **Re-ranking** | Fetch a wider set of candidates first, then sort them again with a second, more careful score, and keep the best few. |
 | **Held-out questions** | Exam questions written *after* tuning and never used to tune, to check the tuning didn't just memorise the exam. |
 | **False-block rate** | How often the guard wrongly refuses a normal, safe question. |
+| **BM25 / full-text search** | Classic keyword search: documents that contain the question's words score higher, and rare words count more. SQLite has it built in (FTS5). |
+| **Cross-encoder** | A small model that reads the question and one document *together* and scores the pair. More careful than embeddings, but slower; I tested it and it didn't help here. |
+| **Release asset** | A file attached to a GitHub release. The nightly job publishes the tested data this way, and the app downloads it. |
+| **Checksum (SHA-256)** | A fingerprint of a file. If even one byte changes, the fingerprint changes, so a corrupted or swapped download is caught. |
 
 ---
 
@@ -286,18 +290,77 @@ Besides the packages the exams ask about, the snapshot deliberately includes pac
 - **Measured:** a throwaway timing run on `ubuntu-latest` (5 CLI questions, one cold process each): 3B mean 129 s, 7B mean 248 s per question (worst: the multi-package scan question, 401 s / 802 s). Real CI exam run (one warm process): retrieval + 18 questions in 11 min 49 s, whole job 17 min 42 s.
 - **Why:** the plan's rule picked 3B, but 3B on the sample wrongly refused a benign question ("Is there an exploit in the wild for CVE-2019-2222?"): false-block 20%. A model that fails the exam is no fallback. The full 26-question sample failed in CI: the long "most urgent package" scan prompt took over 120 s per AI call on a CPU runner (exit 2). The full 26 still run locally.
 
+### D49. Keyword search joins meaning search; the answer key grows with the data (2026-10-11)
+- **What:** the build adds a SQLite FTS5 full-text table of the indexed advisories. On the concept route, the 10 best keyword (BM25) matches join the 20 meaning-search candidates before the existing hybrid re-rank (D28). An old DB without the table still works (no keyword candidates). The `h-mlflow-traversal` answer key accepts all 21 mlflow path-traversal advisories in live data, not just one.
+- **Measured (live data of 2026-09-28):** recall@5 87.9% → 93.9% (31/33); frozen stays 100%.
+- **Why:** each of the four live misses was checked by hand. The werkzeug one ranked 1st once it was a candidate, but meaning search never put it in the pool, and a rare exact phrase is what keyword search is good at. The mlflow "miss" was my answer key, not the system. The other two need knowledge that isn't in the documents (binwalk is a "firmware" tool; the router picks `ecdsa` instead of `starkbank-ecdsa`), so they stay documented misses rather than one-question tuning.
+- **Rejected:** fastembed cross-encoder re-rankers (MiniLM: live unchanged and a frozen item broke; jina-turbo: live 84.8%) and a larger keyword pool (20 or 40: noise pushed live back to 87.9%).
+
+### D50. Nightly job publishes tested data as a release asset; the app pulls it (2026-10-11)
+- **What:** `nightly.yml` (02:17 UTC + manual) builds today's data, runs the retrieval exam and the CI sample of answers and guards on it with the code on `main`, then either uploads `cve-data.tar.gz` + `.sha256` to the `data-latest` release (pass) or opens/comments on one issue per failure kind (fail). `--pull-release` downloads it, checks the SHA-256, extracts with tarfile's `data` filter and swaps it in like a build does; any failure keeps the old data. The scan exam is not run nightly: its key comes from the frozen raw files, so new advisories would fail it with no bug.
+- **Why:** the app should only ever see data that passed the exams. A release asset is free, public and needs no extra service. The archive is uploaded before the checksum, so someone pulling mid-upload gets a mismatch and keeps their old data. The `data` filter stops a malicious archive from writing outside the folder (path traversal, the same bug class as the mlflow advisories).
+
+### D51. The app is a thin page over tested helpers (2026-10-11)
+- **What:** `app.py` (Streamlit) only lays out the page; formatting, data-status and cache handling live in `ui.py`, which has no Streamlit code and has unit tests. The page itself is tested headless with Streamlit's `AppTest`. Scanning works without Ollama; chat shows a message with the fix command when the model is missing. *Reload data* clears the cached Chroma client after a pull swaps the folder. Usage statistics are off.
+- **Why:** UI code is hard to test, so keep as little logic in it as possible. A missing model shouldn't crash the page or block the part that needs no AI.
+
+### D52. A sentence about a scanned package needs a citation too (2026-10-19)
+- **What:** one more answer-prompt rule: a sentence about a package from the scan cites the finding it comes from, at most 3 IDs per sentence. The placeholder example (`[<ID>]`) names no real advisory. New answers-exam case `scan-five-fix-first` uses the app's own 5-package example.
+- **Why:** the chat box's own example question ("Which of my packages should I fix first?") fell back to code-written facts every time on the app's example scan. With 5 packages and 70 findings, `qwen2.5:7b` summarised per package ("Django: multiple critical vulnerabilities…") and named no advisory, so both drafts failed "cites no source". The exam's scan cases have 1–2 packages, so the model never grouped and the exams stayed green.
+- **Rejected:** "name the advisories behind it": the model then listed IDs in a loop until the timeout. Brackets on the scanner-fact IDs: no change.
+
+### D53. Every Ollama call is capped at 1,024 output tokens (2026-10-19)
+- **What:** `num_predict = 1024` on every call. A good answer is about 300 tokens; grader and judge replies are much shorter.
+- **Why:** at temperature 0 a draft can repeat the same IDs forever. Without a cap it hits the 120 s timeout three times (6 minutes) and the user gets an error instead of an answer.
+
 ---
 
 ## 5. Daily journal
 
 *Newest entry first. One entry per work day.*
 
-### Day 12 — 2026-10-09: Phase 6 merged
+### Day 14 — 2026-10-19: Phase 8 (polish), and a chat bug found by using the app
+
+**What I did**
+- Started the app to take README screenshots. The chat box's own example question, "Which of my packages should I fix first?", on the app's example scan (5 packages, 70 findings) gave "I couldn't give a reliable answer" every time.
+- Debugged it one step at a time: reproduced it outside the app with the drafts logged (3/3 identical), ruled out IDs without brackets in the scanner facts, found the cause (per-package summaries with no IDs), and fixed it with one prompt rule (D52). My first rule made the model list IDs in a loop until the timeout, so every call now has an output cap (D53).
+- Added the app's example as answers-exam case `scan-five-fix-first`. Fixed `evals/run.py` so a missing `--out` folder is created; before, the first run of today's exams crashed at the end and its scores were lost.
+- Exams on frozen data with `qwen2.5:7b`: answers (21 questions) citation accuracy, coverage, groundedness and version accuracy **100%**, correctness 95.2% (the same `c-template-sandbox` miss as before), **0 fallbacks**, 5 drafts regenerated. Guards: block rate **100%**, false-block **0%**. 296 tests pass.
+- README: screenshots of both tabs and a results table. Interview notes finished (section 7).
+
+**What I learned**
+- The demo path is a test case. All four exams were green while the app's headline example failed.
+- A fallback is safe, but it means the feature failed. The exam counted fallbacks without a pass mark, and code-written fallback text cites every ID, so it scored as "correct".
+- A prompt fix needs the same checks as a code fix: my first one caused a hang.
+- The new answer cites every claim but ranks Django above Pillow, whose libwebp bug is on CISA's KEV list. The guards check that claims are true, not that the priority is wise. Not tuned on one question; noted for later.
+
+**Open questions / next**
+- Merge PR #1 (Phase 6), then PR #2 (Phases 7 and 8); run `nightly.yml` by hand once on `main` instead of waiting for 02:17 UTC.
+
+### Day 13 — 2026-10-11 to 2026-10-12: Phase 7 built, all exams pass on fresh live data
+
+**What I did**
+- 2026-10-11: built Phase 7: keyword candidates in retrieval (D49), nightly data releases (D50), Streamlit app (D51). Committed on the `phase7-app` branch.
+- 2026-10-12: rebuilt live data from scratch (the first try was interrupted, see challenges). Fresh data: 25,604 advisories, 13,808 searchable, 11,796 malware, 616 withdrawn, 23 flagged, 1,739 KEV, 0 malformed. About 20 min, most of it embeddings.
+- Ran the AI exams one at a time on the fresh live data with `qwen2.5:7b`:
+  - Retrieval (`uv run python -m evals.retrieval_exam --target live`): recall@5 **93.9%** (31/33), route accuracy 97.4%. Same misses as D49: `h-binwalk-symlink` (right route, not in top 5) and `h-ecdsa-signature` (routed to the package route instead of concept).
+  - Guards (`uv run python -m evals.guards_exam --target live`): block rate **100%** (questions, planted and flagged all 100%), false-block **0%**. 2 benign questions (`bn9`, `bn21`) got the "couldn't find" fallback, not a refusal.
+  - Answers (`uv run python -m evals.answers_exam --target live`, 20 questions): citation accuracy, coverage, groundedness, correctness and version accuracy all **100%**, 0 fallbacks. 8 of 20 answers were regenerated after the grader rejected the first draft.
+
+**What I learned**
+- Run the heavy jobs (build, then each exam) one after another, not together, and keep the Mac awake with `caffeinate -w <pid>`. Closing the lid pauses everything.
+- The self-check matters: 8 first drafts were rejected and fixed before anyone saw them.
+
+**Open questions / next**
+- Commit the docs, merge PR #1, then check that the first nightly run on `main` passes.
+- Phase 8 (polish): screenshot or GIF for the README, final interview notes.
+
+### Day 12 — 2026-10-09: Phase 6 ready to merge
 
 **What I did**
 - Checked PR #1's last CI run (18-question sample, timeout 40): `checks` and `ai-exams` both green.
 - Marked Phase 6 done in the main spec's phase table and the Phase 6 spec; ticked the plan boxes.
-- Merged PR #1 into `main`.
+- PR #1 is green and ready, but not merged yet: the merge needs my own click on GitHub (corrected 2026-10-11; this line first said "merged").
 
 **What I learned**
 - Don't push while the long CI job runs: a new push cancels it. Batch doc commits until the run is green.
@@ -599,11 +662,12 @@ Skipped:
 | Metric | Target | Current | Date |
 |---|---|---|---|
 | Scanner accuracy (scan cases) | 100% | 100% (26/26 cases) | 2026-09-30 |
-| Retrieval recall@5 | ≥ 90% | 100% frozen (33/33); 87.9% on live data | 2026-10-01 |
-| Citation accuracy | ≥ 98% | 100% (answers exam, 20 questions) | 2026-10-01 |
-| Groundedness | ≥ 90% | 100% (local `qwen2.5:7b` as judge) | 2026-10-05 |
-| Attack block rate | ≥ 95% | 100% frozen (32 attacks) | 2026-10-05 |
-| False-block rate | ≤ 5% | 0% frozen (27 benign questions) | 2026-10-05 |
+| Retrieval recall@5 | ≥ 90% | 100% frozen (33/33); 93.9% on live data (31/33) | 2026-10-12 |
+| Citation accuracy | ≥ 98% | 100% (answers exam, 21 questions, 0 fallbacks) | 2026-10-19 |
+| Groundedness | ≥ 90% | 100% (local `qwen2.5:7b` as judge) | 2026-10-19 |
+| Attack block rate | ≥ 95% | 100% frozen (32 attacks) | 2026-10-19 |
+| False-block rate | ≤ 5% | 0% frozen (27 benign questions) | 2026-10-19 |
+| Full AI exams on fresh live data | all pass marks | recall 93.9%, citation acc. 100%, groundedness 100%, block 100%, false-block 0% | 2026-10-12 |
 | CI sample (ai-exams job) | all pass marks | recall 100%, citation acc. 100%, groundedness 100%, block 100%, false-block 0% on `qwen2.5:7b` in 18 min (18 questions) | 2026-10-08 |
 
 ---
@@ -625,10 +689,22 @@ It has its own exam: attack questions (must be blocked) and normal questions tha
 It doesn't run the same pipeline for every question. A router picks the route per question, and a grader decides whether the results are good enough, retrying with a rewritten query or admitting it doesn't know.
 
 **Q: How does your CI work if you only use free models?**
-The CI machine runs the same model as my laptop (Ollama + `qwen2.5:7b`). GitHub Models, my first plan, was retired before I got there. A CPU runner is slow, so every push runs only the cheap exact checks, and a fixed 18-question sample of the AI exams runs when a PR gets the `ai-exams` label. Code changes are tested on frozen data, and nightly data updates are tested on frozen code, so every score change has one clear cause.
+The CI machine runs the same open model I use locally (`qwen2.5:7b` in Ollama) on GitHub's free runners; the model is cached between runs. Cheap exact checks run on every push; the slow AI exams run on a fixed 18-question sample when a PR asks for them. I first planned GitHub Models, but it was retired, and I found that by testing the API before building on it.
+
+**Q: How do you keep the data fresh without breaking things?**
+A nightly job downloads that day's advisories, rebuilds the database and runs the AI exams on it with the code on `main`. Only if every score passes is the data published as a release that the app pulls; if not, it opens an issue and yesterday's data stays live. Code changes are tested on frozen data and data changes on frozen code, so when a score moves there is one cause to look at.
+
+**Q: Your retrieval score dropped on real data. What did you do?**
+Recall was 100% on the small test snapshot but 87.9% on the full database. I looked at each miss instead of tuning a number: one was a candidate-pool problem (fixed by adding keyword search as a second way in, BM25 through SQLite's built-in full-text index), one was my own answer key being too narrow for the bigger data, and two need knowledge the documents don't contain. I also tried a cross-encoder re-ranker; it made things worse, so I didn't ship it. Recall went to 93.9% on the same data.
+
+**Q: Tell me about a bug your tests missed.**
+While taking README screenshots, the chat box's own example question, "Which of my packages should I fix first?", gave "I couldn't give a reliable answer" every time. The answers exam was green because its scan questions used 1–2 packages, and with 5 packages the model wrote per-package summaries with no citations. The output guard rejected both drafts, which was correct, and the safe fallback hid the problem: it's written by code and cites every ID, so the exam scored it as correct. I reproduced it, ruled out one theory (bracketed IDs in the facts), added one prompt rule, and added the app's example as an exam case. My first version of the rule made the model list IDs in a loop until it timed out, so I also capped the output on every call.
 
 **Q: What would you do differently / next?**
-*(Fill in at the end: see roadmap.)*
+- Give fallbacks a pass mark. A fallback is safe, but it means the feature failed, and today only the trace shows it.
+- Make exam cases from the real demo paths from day one, not only from small, targeted inputs.
+- When a scan is attached and the question is about "my packages", skip general search: the grader let two unrelated advisories (nltk, python-apt) through as sources.
+- Then the roadmap below: more ecosystems, and failures turned into exam questions automatically.
 
 ---
 
@@ -658,6 +734,10 @@ The CI machine runs the same model as my laptop (Ollama + `qwen2.5:7b`). GitHub 
 | 2026-10-08 | A 0-byte `data/frozen/cve.db` was committed | `sqlite3.connect()` silently creates a missing file; a test opened the DB before it was built | Untracked + ignored; the test now checks the file exists; `run.py` checks before connecting (exit 2 + "build it first") | Libraries that "helpfully" create files hide missing-input bugs |
 | 2026-10-08 | The CI time estimate said ~112 min for 7B | Timing ran each question in a new process (cold model) and included a 802 s scan question | Measured the real job instead: 18 min | Measure the thing you'll actually run |
 | 2026-10-08 | Full 26-question CI sample failed with exit 2 | The multi-package scan prompt needs > 120 s per AI call on a CPU runner | Kept it for local runs; CI uses 18 questions | Slow hardware changes which tests are practical, not the pass marks |
+| 2026-10-11 | Live recall@5 87.9%, below the 90% nightly pass mark | Four different causes: a candidate never entered the meaning-search pool; an answer key that listed 1 of 21 correct advisories; two questions needing outside knowledge | Keyword (BM25) candidates join the pool; widened the key with a written rule; documented the other two. 93.9% (D49) | Read each miss before changing anything; a "fancier" fix (cross-encoder) made it worse |
+| 2026-10-12 | A live rebuild left a half-built `data/live.building` and the old data in place | The session that ran it ended before the build finished | Nothing to fix: the build swaps folders only at the end, so the app kept the old data; deleted the leftover and rebuilt | The atomic swap paid off: an interrupted job can't leave a broken database |
+| 2026-10-19 | Taking README screenshots, the app's own example question gave "I couldn't give a reliable answer" | With 5 scanned packages the model summarised per package and cited nothing; the exam only had 1–2 package scans. Fallbacks have no pass mark, and code-written fallback text cites every ID, so the exam scored it as correct | Prompt rule (D52), exam case with the app's example | Use the product the way a user would; the demo path is a test case too. A safe fallback can hide a failing feature from the metrics |
+| 2026-10-19 | My first prompt fix made the app hang for 6 minutes | "Name the advisories" made the model list IDs in a loop; no output cap, so three 120 s timeouts | Rewrote the rule (D52) and capped output at 1,024 tokens (D53) | A prompt fix can break things too: re-run the cases, and cap output on every call |
 
 ---
 
@@ -666,3 +746,5 @@ The CI machine runs the same model as my laptop (Ollama + `qwen2.5:7b`). GitHub 
 - Move the pipeline to LangGraph for visual tracing.
 - Compare retrieval methods (keyword vs meaning vs hybrid) and publish the results.
 - Turn production failures into new exam questions automatically.
+- A pass mark for fallbacks (today they are counted but not gated).
+- Questions about "my packages" with a scan attached: use the scan's advisories only, no general search (today unrelated advisories can be added as sources).

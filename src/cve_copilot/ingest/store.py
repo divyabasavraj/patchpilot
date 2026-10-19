@@ -17,6 +17,7 @@ CREATE TABLE kev(cve_id TEXT PRIMARY KEY, date_added TEXT, ransomware TEXT);
 CREATE INDEX idx_affected_pkg ON affected(package);
 CREATE INDEX idx_versions_pkg ON affected_versions(package);
 CREATE INDEX idx_alias ON aliases(alias);
+CREATE VIRTUAL TABLE advisory_text USING fts5(id UNINDEXED, body, tokenize='porter');
 """
 
 
@@ -48,3 +49,7 @@ def insert_advisories(con: sqlite3.Connection, advisories: list[Advisory]) -> No
                     [(a.id, p, v) for a in advisories for p, v in a.versions])
     con.executemany("INSERT INTO refs VALUES (?,?,?)",
                     [(a.id, t, u) for a in advisories for t, u in a.refs])
+    # Keyword search (D49); malware is left out, as in the Chroma index (D11).
+    con.executemany("INSERT INTO advisory_text VALUES (?,?)",
+                    [(a.id, f"{a.summary}\n{a.details}") for a in advisories
+                     if not a.id.startswith("MAL-")])
